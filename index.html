@@ -376,12 +376,12 @@ async function generateProof() {
     artStatus.textContent = 'Saving…';
     artStatus.style.color = '#6A994E';
     try {
-      const artNum = await claimAndSaveArtNumber({
+      const claimed = await claimAndSaveArtNumber({
         customer_name: customer, artwork_name: artwork,
         job_number: job, garment, dropbox_link: dropbox, notes,
         placements: pls
       });
-      artField.value = artNum;
+      artField.value = claimed;
       artField.style.color = '#386641';
       artField.dataset.claimed = 'true';
       artStatus.textContent = '✓ Saved';
@@ -391,6 +391,8 @@ async function generateProof() {
       artStatus.style.color = '#BC4749';
     }
   }
+  // Read art number from field (works whether just claimed or previously set)
+  const artNum = artField.value;
   let dateStr='';
   if(date){ const d=new Date(date+'T00:00:00'); dateStr=d.toLocaleDateString('en-US',{month:'numeric',year:'numeric'}); }
   const metaId=[job,customer.replace(/\s+/g,'')+'_'+artwork.replace(/\s+/g,'')].filter(Boolean).join('_');
@@ -458,7 +460,16 @@ function clearForm() {
 // ── Supabase ──────────────────────────────────────────────────────────────
 const SUPABASE_URL = "https://upyohtshhvdmbubwuionh.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVweW9odHNodnZkbWJ1YnVpb25oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgyNTI1MDEsImV4cCI6MjA5MzgyODUwMX0.FXsywxj6FrhLqHAyQ1HEy53lCkNmCL8In1jFUnD1U-U";
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+  global: {
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': 'Bearer ' + SUPABASE_KEY,
+    }
+  },
+  db: { schema: 'public' },
+  auth: { persistSession: false }
+});
 
 const METHOD_PREFIX = {
   'DTF':         't',
@@ -498,15 +509,24 @@ async function previewArtNumber() {
   status.style.color = '#888780';
 
   try {
-    const { data, error } = await sb
-      .from('art_counters')
-      .select('next_number')
-      .eq('method', method.toLowerCase())
-      .single();
+    // Use raw fetch with explicit CORS headers to avoid Supabase JS client issues
+    const resp = await fetch(
+      SUPABASE_URL + '/rest/v1/art_counters?select=next_number&method=eq.' + method.toLowerCase(),
+      {
+        method: 'GET',
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': 'Bearer ' + SUPABASE_KEY,
+          'Content-Type': 'application/json',
+        },
+        mode: 'cors',
+      }
+    );
+    if (!resp.ok) throw new Error('HTTP ' + resp.status + ': ' + await resp.text());
+    const rows = await resp.json();
+    if (!rows.length) throw new Error('Method not found: ' + method);
 
-    if (error) throw error;
-
-    const preview = buildArtNumber(data.next_number, method, customer, artwork);
+    const preview = buildArtNumber(rows[0].next_number, method, customer, artwork);
     field.value = preview;
     field.style.color = '#888780';
     status.textContent = '(preview — not saved)';
@@ -520,35 +540,46 @@ async function previewArtNumber() {
 // Claim a real art number (increments counter, saves to DB)
 async function claimAndSaveArtNumber(proofData) {
   const method = getPrimaryMethod();
-  const status = document.getElementById('artNumStatus');
 
-  // Call atomic DB function to claim next number
-  const { data: numData, error: numErr } = await sb
-    .rpc('claim_art_number', { p_method: method.toLowerCase() });
-
-  if (numErr) throw numErr;
-
-  const artNum = buildArtNumber(
-    numData,
-    method,
-    proofData.customer_name,
-    proofData.artwork_name
-  );
-
-  // Save proof record
-  const { error: saveErr } = await sb.from('proofs').insert({
-    art_number:    artNum,
-    method:        method,
-    customer_name: proofData.customer_name,
-    artwork_name:  proofData.artwork_name,
-    job_number:    proofData.job_number    || null,
-    garment:       proofData.garment       || null,
-    dropbox_link:  proofData.dropbox_link  || null,
-    notes:         proofData.notes         || null,
-    placements:    proofData.placements    || [],
+  // Step 1: Claim next number via RPC using raw fetch
+  const rpcResp = await fetch(SUPABASE_URL + '/rest/v1/rpc/claim_art_number', {
+    method: 'POST',
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': 'Bearer ' + SUPABASE_KEY,
+      'Content-Type': 'application/json',
+    },
+    mode: 'cors',
+    body: JSON.stringify({ p_method: method.toLowerCase() }),
   });
+  if (!rpcResp.ok) throw new Error('RPC error ' + rpcResp.status + ': ' + await rpcResp.text());
+  const numData = await rpcResp.json();
 
-  if (saveErr) throw saveErr;
+  const artNum = buildArtNumber(numData, method, proofData.customer_name, proofData.artwork_name);
+
+  // Step 2: Save proof record via raw fetch
+  const saveResp = await fetch(SUPABASE_URL + '/rest/v1/proofs', {
+    method: 'POST',
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': 'Bearer ' + SUPABASE_KEY,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal',
+    },
+    mode: 'cors',
+    body: JSON.stringify({
+      art_number:    artNum,
+      method:        method,
+      customer_name: proofData.customer_name,
+      artwork_name:  proofData.artwork_name,
+      job_number:    proofData.job_number  || null,
+      garment:       proofData.garment     || null,
+      dropbox_link:  proofData.dropbox_link|| null,
+      notes:         proofData.notes       || null,
+      placements:    proofData.placements  || [],
+    }),
+  });
+  if (!saveResp.ok) throw new Error('Save error ' + saveResp.status + ': ' + await saveResp.text());
 
   return artNum;
 }
