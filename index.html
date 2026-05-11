@@ -170,7 +170,7 @@
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:16px">
-    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v7r17</span></span>
+    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v8</span></span>
     <div class="db-status" id="dbStatus">
       <div class="db-dot checking" id="dbDot"></div>
       <span id="dbLabel">Checking DB…</span>
@@ -287,6 +287,7 @@
     <div class="proof-mockups" id="proofMockups">
       <div style="color:#386641;font-size:13px;display:flex;align-items:center;gap:8px">&#128247; Upload mockup images and click Generate Proof</div>
     </div>
+    <div id="proofPlacementArt" style="display:none;padding:8px 16px;border-top:1px solid #EDEDEB;background:#f8f8f6;flex-shrink:0"></div>
     <div class="proof-details" id="proofDetails" style="display:none"></div>
     <div class="proof-footer">
       <span id="proofFootL">Mirror Image &middot; Artwork Proof</span>
@@ -574,6 +575,23 @@ async function generateProof() {
     const itemFlex = '1 1 ' + Math.floor(90/count) + '%';
     mx.innerHTML=uploads.map(f=>'<div class="proof-mockup-item" style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:'+itemFlex+';min-width:0;height:100%">'+(f.type==='application/pdf'?'<div class="proof-mockup-img-wrap" style="width:100%;flex:1;min-height:0"><div style="padding:20px;font-size:12px;color:#888780">PDF: '+f.name+'</div></div>':'<div class="proof-mockup-img-wrap" style="width:100%;flex:1;min-height:0"><img src="'+f.url+'" alt="'+f.name+'" style="width:100%;height:100%;object-fit:contain"></div>')+'<div class="proof-mockup-lbl">'+f.name.replace(/\.[^.]+$/,'')+'</div></div>').join('');
   } else { mx.innerHTML='<div style="color:#6A994E;font-size:13px;padding:3rem 0">No mockup images uploaded.</div>'; }
+  // Show placement art file names in proof
+  const plArtSection = document.getElementById('proofPlacementArt');
+  if (plArtSection) {
+    const artEntries = Array.from(document.querySelectorAll('.pl-entry')).filter(e=>e._artFile);
+    if (artEntries.length) {
+      plArtSection.style.display='block';
+      plArtSection.innerHTML = '<div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#386641;margin-bottom:6px">Art Files</div>'
+        + artEntries.map(e=>{
+            const loc = e.querySelector('.pl-loc').value;
+            const sfx = PLACEMENT_SUFFIX[loc]||loc.toUpperCase();
+            const artNum2 = document.getElementById('artNumber').value||'ART';
+            const ext = e._artFile.name.split('.').pop();
+            return '<div style="font-family:monospace;font-size:11px;color:#0061fe;padding:2px 0">'+artNum2+'-'+sfx+'.'+ext+'</div>';
+          }).join('');
+    } else { plArtSection.style.display='none'; }
+  }
+
   const dt=document.getElementById('proofDetails');
   const fields=[
     ['Customer',customer],['Artwork Name',artwork],
@@ -621,10 +639,6 @@ function getDbxFolder(artNum) {
 }
 let dbxToken   = localStorage.getItem('dbx_token') || null;
 let artFileObj = null;
-let _pendingBlob = null;
-let _pendingFolder = null;
-let _pendingArtFiles = [];
-let _pendingArtNum = null;
 
 
 
@@ -776,62 +790,6 @@ async function uploadToDropbox() {
   }
 }
 
-function cancelPdfUpload() {
-  document.getElementById("pdfPreviewOverlay").classList.remove("visible");
-  _pendingBlob = null;
-}
-
-async function proceedWithUpload() {
-  if (!_pendingBlob) { alert("No PDF generated."); return; }
-  const prog    = document.getElementById("pdfUploadProgress");
-  const upBtn   = document.querySelector(".pdf-preview-btns .btn:last-child");
-  prog.style.display = "block";
-  prog.style.color   = "#6A994E";
-  upBtn.disabled     = true;
-  upBtn.textContent  = "Uploading...";
-
-  try {
-    const total = _pendingArtFiles.length + 2;
-    let step = 1;
-
-    // Upload art files
-    for (const e of _pendingArtFiles) {
-      const loc   = e.querySelector(".pl-loc").value;
-      const sfx   = PLACEMENT_SUFFIX[loc] || loc.toUpperCase();
-      const file  = e._artFile;
-      const fname = _pendingArtNum + "-" + sfx + "." + file.name.split(".").pop();
-      prog.textContent = step + "/" + total + " Uploading " + fname + "...";
-      await dbxUploadFile(_pendingFolder + "/" + fname, file);
-      step++;
-    }
-
-    // Upload PDF
-    prog.textContent = step + "/" + total + " Uploading proof PDF...";
-    await dbxUploadFile(_pendingFolder + "/" + _pendingArtNum + "_proof.pdf", _pendingBlob);
-    step++;
-
-    // Shared link
-    prog.textContent = step + "/" + total + " Creating link...";
-    const link = await dbxGetOrCreateLink(_pendingFolder);
-    if (link) document.getElementById("dropboxLink").value = link;
-
-    prog.textContent = "\u2713 Done! Uploaded to " + _pendingArtNum;
-    prog.style.color = "#386641";
-    upBtn.textContent = "\u2713 Done";
-    setTimeout(() => {
-      document.getElementById("pdfPreviewOverlay").classList.remove("visible");
-      _pendingBlob = null;
-    }, 2500);
-
-  } catch(err) {
-    prog.textContent  = "Error: " + err.message;
-    prog.style.color  = "#BC4749";
-    upBtn.disabled    = false;
-    upBtn.textContent = "Retry";
-  }
-}
-
-
 function closeUploadModal() { document.getElementById("uploadOverlay").classList.remove("visible"); }
 
 async function confirmUpload() {
@@ -896,6 +854,318 @@ function exportPDF() {
   });
 }
 
+
+function clearForm() {
+  if(!confirm('Clear all form data?')) return;
+  document.getElementById('mainLayout').classList.remove('split-mode');
+  document.getElementById('mainLayout').classList.add('entry-mode');
+  document.getElementById('proofHint').style.display='block';
+
+  ['customerName','artworkName','jobNumber','garmentStyle','dropboxLink','notes'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('proofDate').valueAsDate=new Date();
+  uploads=[]; renderThumbs();
+  document.getElementById('plEntries').innerHTML='';
+  plCount=0;
+  const af=document.getElementById('artNumber'); af.value=''; af.dataset.claimed='false'; af.style.color='#386641';
+  document.getElementById('artNumStatus').textContent='';
+  document.getElementById('proofMetaL').textContent='—';
+  document.getElementById('proofMetaR').textContent='—';
+  document.getElementById('proofHdrRight').innerHTML='';
+  document.getElementById('proofPlBar').style.display='none';
+  document.getElementById('proofMockups').innerHTML='<div style="color:var(--gray-400);font-size:13px;display:flex;align-items:center;gap:8px;padding:3rem 0">&#128247; Upload mockup images and click Generate Proof</div>';
+  document.getElementById('proofDetails').style.display='none';
+  document.getElementById('proofDetails').innerHTML='';
+}
+
+
+
+
+(function handleOAuthReturn() {
+  const hash = window.location.hash;
+  if (hash.includes('access_token=')) {
+    const params = new URLSearchParams(hash.replace('#','?'));
+    const token = params.get('access_token');
+    if (token) { dbxToken = token; localStorage.setItem('dbx_token', token); history.replaceState(null,'',window.location.pathname); }
+  }
+  updateDbxUI();
+})();
+
+
+
+artZone.addEventListener('dragover', e=>{ e.preventDefault(); artZone.classList.add('dragover'); });
+artZone.addEventListener('dragleave', ()=>artZone.classList.remove('dragover'));
+artZone.addEventListener('drop', e=>{ e.preventDefault(); artZone.classList.remove('dragover'); if(e.dataTransfer.files[0]) setArtFile(e.dataTransfer.files[0]); });
+
+
+
+
+
+
+
+
+
+
+
+
+addPlacement();
+
+
+
+
+// ── Supabase ──────────────────────────────────────────────────────────────
+
+(function handleOAuthReturn() {
+  const hash = window.location.hash;
+  if (hash.includes('access_token=')) {
+    const params = new URLSearchParams(hash.replace('#','?'));
+    const token = params.get('access_token');
+    if (token) { dbxToken = token; localStorage.setItem('dbx_token', token); history.replaceState(null,'',window.location.pathname); }
+  }
+  updateDbxUI();
+})();
+
+
+
+artZone.addEventListener('dragover', e=>{ e.preventDefault(); artZone.classList.add('dragover'); });
+artZone.addEventListener('dragleave', ()=>artZone.classList.remove('dragover'));
+artZone.addEventListener('drop', e=>{ e.preventDefault(); artZone.classList.remove('dragover'); if(e.dataTransfer.files[0]) setArtFile(e.dataTransfer.files[0]); });
+
+
+
+
+
+
+
+
+
+
+addPlacement();
+
+
+
+
+// ── Supabase ──────────────────────────────────────────────────────────────
+// Returns the primary decoration method from the first placement entry
+function getPrimaryMethod() {
+  const first = document.querySelector('.pl-method');
+  return first ? first.value : 'Screenprint';
+}
+
+// Build art number string from counter number + form fields
+function buildArtNumber(num, method, customer, artwork) {
+  const prefix = METHOD_PREFIX[method.toLowerCase()] ?? '';
+  const store  = customer.replace(/\s+/g, '').replace(/[^a-zA-Z0-9_-]/g, '') || 'Store';
+  const design = artwork.replace(/\s+/g, '').replace(/[^a-zA-Z0-9_-]/g, '')  || 'Design';
+  return `${prefix}${num}Store_${store}_${design}`;
+}
+
+// Preview art number (does NOT increment counter)
+async function previewArtNumber() {
+  const status = document.getElementById('artNumStatus');
+  const field  = document.getElementById('artNumber');
+  const method   = getPrimaryMethod();
+  const customer = document.getElementById('customerName').value || 'Customer';
+  const artwork  = document.getElementById('artworkName').value  || 'Artwork';
+
+  status.textContent = 'Loading…';
+  status.style.color = '#888780';
+
+  try {
+    // Use raw fetch with explicit CORS headers to avoid Supabase JS client issues
+    const resp = await fetch(
+      SUPABASE_URL + '/rest/v1/art_counters?select=next_number&method=eq.' + method.toLowerCase(),
+      {
+        method: 'GET',
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': 'Bearer ' + SUPABASE_KEY,
+          'Content-Type': 'application/json',
+        },
+        mode: 'cors',
+      }
+    );
+    if (!resp.ok) throw new Error('HTTP ' + resp.status + ': ' + await resp.text());
+    const rows = await resp.json();
+    if (!rows.length) throw new Error('Method not found: ' + method);
+
+    const preview = buildArtNumber(rows[0].next_number, method, customer, artwork);
+    field.value = preview;
+    field.style.color = '#888780';
+    status.textContent = '(preview — not saved)';
+    status.style.color = '#888780';
+  } catch(err) {
+    status.textContent = 'Error: ' + err.message;
+    status.style.color = '#BC4749';
+  }
+}
+
+// Claim a real art number (increments counter, saves to DB)
+async function claimAndSaveArtNumber(proofData) {
+  const method = getPrimaryMethod();
+
+  // Step 0: Ensure counter row exists
+  const meth0 = getPrimaryMethod().toLowerCase();
+  await fetch(SUPABASE_URL + '/rest/v1/art_counters', {
+    method: 'POST',
+    headers: {'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':'resolution=ignore-duplicates'},
+    mode: 'cors',
+    body: JSON.stringify({method: meth0, next_number: 1001}),
+  });
+  // Step 1: Claim next number via RPC using raw fetch
+  const rpcResp = await fetch(SUPABASE_URL + '/rest/v1/rpc/claim_art_number', {
+    method: 'POST',
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': 'Bearer ' + SUPABASE_KEY,
+      'Content-Type': 'application/json',
+    },
+    mode: 'cors',
+    body: JSON.stringify({ p_method: method.toLowerCase() }),
+  });
+  if (!rpcResp.ok) throw new Error('RPC error ' + rpcResp.status + ': ' + await rpcResp.text());
+  const numData = await rpcResp.json();
+
+  const artNum = buildArtNumber(numData, method, proofData.customer_name, proofData.artwork_name);
+
+  // Step 2: Save proof record via raw fetch
+  const saveResp = await fetch(SUPABASE_URL + '/rest/v1/proofs', {
+    method: 'POST',
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': 'Bearer ' + SUPABASE_KEY,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal',
+    },
+    mode: 'cors',
+    body: JSON.stringify({
+      art_number:    artNum,
+      method:        method,
+      customer_name: proofData.customer_name,
+      artwork_name:  proofData.artwork_name,
+      job_number:    proofData.job_number  || null,
+      garment:       proofData.garment     || null,
+      dropbox_link:  proofData.dropbox_link|| null,
+      notes:         proofData.notes       || null,
+      placements:    proofData.placements  || [],
+    }),
+  });
+  if (!saveResp.ok) throw new Error('Save error ' + saveResp.status + ': ' + await saveResp.text());
+
+  return artNum;
+}
+// ── End Supabase ──────────────────────────────────────────────────────────
+
+// ── DB Status + Previous Jobs ─────────────────────────────────────────────────
+async function checkDBStatus() {
+  const dot   = document.getElementById('dbDot');
+  const label = document.getElementById('dbLabel');
+  try {
+    const resp = await fetch(
+      SUPABASE_URL + '/rest/v1/art_counters?select=method&limit=1',
+      { method:'GET', headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY}, mode:'cors' }
+    );
+    if (resp.ok) {
+      dot.className = 'db-dot online';
+      label.textContent = 'DB Online';
+      loadPreviousJobs(); // populate dropdown now we know DB is up
+    } else {
+      dot.className = 'db-dot offline';
+      label.textContent = 'DB Error ' + resp.status;
+    }
+  } catch(e) {
+    dot.className = 'db-dot offline';
+    label.textContent = 'DB Offline';
+  }
+}
+
+async function loadPreviousJobs() {
+  try {
+    const resp = await fetch(
+      SUPABASE_URL + '/rest/v1/proofs?select=id,art_number,customer_name,artwork_name,job_number,garment,dropbox_link,notes,placements,method,created_at&order=created_at.desc&limit=50',
+      { method:'GET', headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json'}, mode:'cors' }
+    );
+    if (!resp.ok) return;
+    const jobs = await resp.json();
+    const sel = document.getElementById('loadJobSelect');
+    // Clear existing options except the first placeholder
+    while (sel.options.length > 1) sel.remove(1);
+    jobs.forEach(j => {
+      const opt = document.createElement('option');
+      opt.value = JSON.stringify(j);
+      const date = new Date(j.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+      opt.textContent = (j.art_number || j.job_number || j.id) + ' — ' + j.customer_name + ' / ' + j.artwork_name + ' (' + date + ')';
+      sel.appendChild(opt);
+    });
+  } catch(e) {
+    console.warn('Could not load previous jobs:', e);
+  }
+}
+
+function loadJob(val) {
+  if (!val) return;
+  const j = JSON.parse(val);
+
+  // Switch to entry mode first
+  document.getElementById('mainLayout').classList.remove('split-mode');
+  document.getElementById('mainLayout').classList.add('entry-mode');
+  document.getElementById('proofHint').style.display = 'block';
+
+  // Fill form fields
+  document.getElementById('customerName').value  = j.customer_name  || '';
+  document.getElementById('artworkName').value   = j.artwork_name   || '';
+  document.getElementById('jobNumber').value     = j.job_number     || '';
+  document.getElementById('garmentStyle').value  = j.garment        || '';
+  document.getElementById('dropboxLink').value   = j.dropbox_link   || '';
+  document.getElementById('notes').value         = j.notes          || '';
+
+  // Reset art number — a new proof will get a new number
+  const af = document.getElementById('artNumber');
+  af.value = ''; af.dataset.claimed = 'false'; af.style.color = '#386641';
+  document.getElementById('artNumStatus').textContent = '(loaded from previous — new number on Generate)';
+  document.getElementById('artNumStatus').style.color = '#888780';
+
+  // Re-populate placements
+  document.getElementById('plEntries').innerHTML = '';
+  plCount = 0;
+  const placements = Array.isArray(j.placements) ? j.placements : [];
+  if (placements.length) {
+    placements.forEach(p => {
+      addPlacement();
+      const entries = document.querySelectorAll('.pl-entry');
+      const entry = entries[entries.length - 1];
+      // Set location dropdown
+      const locSel = entry.querySelector('.pl-loc');
+      Array.from(locSel.options).forEach(opt => {
+        if (opt.text === p.loc) { locSel.value = opt.value; }
+      });
+      onLocChange(locSel);
+      entry.querySelector('.pl-w').value      = p.w      || '';
+      entry.querySelector('.pl-h').value      = p.h      || '';
+      entry.querySelector('.pl-collar').value = p.collar || '';
+      entry.querySelector('.pl-center').value = p.center || '';
+      entry.querySelector('.pl-desc').value   = p.desc   || '';
+      // Set method dropdown
+      const mSel = entry.querySelector('.pl-method');
+      Array.from(mSel.options).forEach(opt => {
+        if (opt.text === p.method || opt.value === p.method) { mSel.value = opt.value; }
+      });
+      entry.querySelector('.pl-colors').value = p.colors || '';
+    });
+  } else {
+    addPlacement();
+  }
+
+  // Reset select back to placeholder
+  document.getElementById('loadJobSelect').value = '';
+
+  // Clear mockups (user must re-upload)
+  uploads = []; renderThumbs();
+  // Clear proof panel
+  document.getElementById('proofMockups').innerHTML = '<div style="color:#6A994E;font-size:13px;display:flex;align-items:center;gap:8px;padding:3rem 0">&#128247; Upload mockup images and click Generate Proof</div>';
+  document.getElementById('proofDetails').style.display = 'none';
+  document.getElementById('proofPlBar').style.display = 'none';
+}
+
 async function generateProofBlob() {
   // Build a clean self-contained snapshot div with fixed pixel dimensions
   const source = document.getElementById('proofOutput');
@@ -956,6 +1226,76 @@ async function generateProofBlob() {
     });
   });
 }
+
+
+function cancelPdfUpload() {
+  document.getElementById("pdfPreviewOverlay").classList.remove("visible");
+  _pendingBlob = null;
+}
+
+async function proceedWithUpload() {
+  if (!_pendingBlob) { alert("No PDF generated."); return; }
+  const prog    = document.getElementById("pdfUploadProgress");
+  const upBtn   = document.querySelector(".pdf-preview-btns .btn:last-child");
+  prog.style.display = "block";
+  prog.style.color   = "#6A994E";
+  upBtn.disabled     = true;
+  upBtn.textContent  = "Uploading...";
+
+  try {
+    const total = _pendingArtFiles.length + 2;
+    let step = 1;
+
+    // Upload art files
+    for (const e of _pendingArtFiles) {
+      const loc   = e.querySelector(".pl-loc").value;
+      const sfx   = PLACEMENT_SUFFIX[loc] || loc.toUpperCase();
+      const file  = e._artFile;
+      const fname = _pendingArtNum + "-" + sfx + "." + file.name.split(".").pop();
+      prog.textContent = step + "/" + total + " Uploading " + fname + "...";
+      await dbxUploadFile(_pendingFolder + "/" + fname, file);
+      step++;
+    }
+
+    // Upload PDF
+    prog.textContent = step + "/" + total + " Uploading proof PDF...";
+    await dbxUploadFile(_pendingFolder + "/" + _pendingArtNum + "_proof.pdf", _pendingBlob);
+    step++;
+
+    // Shared link
+    prog.textContent = step + "/" + total + " Creating link...";
+    const link = await dbxGetOrCreateLink(_pendingFolder);
+    if (link) document.getElementById("dropboxLink").value = link;
+
+    prog.textContent = "\u2713 Done! Uploaded to " + _pendingArtNum;
+    prog.style.color = "#386641";
+    upBtn.textContent = "\u2713 Done";
+    setTimeout(() => {
+      document.getElementById("pdfPreviewOverlay").classList.remove("visible");
+      _pendingBlob = null;
+    }, 2500);
+
+  } catch(err) {
+    prog.textContent  = "Error: " + err.message;
+    prog.style.color  = "#BC4749";
+    upBtn.disabled    = false;
+    upBtn.textContent = "Retry";
+  }
+}
+// Run DB check on load — wait for DOM to be ready
+function initDBCheck() {
+  checkDBStatus();
+  setInterval(checkDBStatus, 60000);
+}
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initDBCheck);
+} else {
+  initDBCheck();
+}
+// ── End DB Status + Previous Jobs ─────────────────────────────────────────────
+
+
+
 
 
 </script>
