@@ -129,7 +129,7 @@
       <span class="sub">Screenprinting · Embroidery · Promo</span>
     </div>
   </div>
-  <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v6</span></span>
+  <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v6r1</span></span>
   <div style="display:flex;gap:8px">
     <button class="btn btn-secondary" onclick="clearForm()">Clear</button>
     <button class="btn btn-orange" onclick="exportPDF()">&#128462; Export PDF</button>
@@ -415,7 +415,6 @@ async function generateProof() {
     mx.innerHTML=uploads.map(f=>'<div class="proof-mockup-item">'+(f.type==='application/pdf'?'<div class="proof-mockup-img-wrap"><div style="width:220px;height:260px;display:flex;align-items:center;justify-content:center;font-size:12px;color:#888780">PDF: '+f.name+'</div></div>':'<div class="proof-mockup-img-wrap"><img src="'+f.url+'" alt="'+f.name+'"></div>')+'<div class="proof-mockup-lbl">'+f.name.replace(/\.[^.]+$/,'')+'</div></div>').join('');
   } else { mx.innerHTML='<div style="color:#6A994E;font-size:13px;padding:3rem 0">No mockup images uploaded.</div>'; }
   const dt=document.getElementById('proofDetails');
-  const artNum = document.getElementById('artNumber').value;
   const fields=[
     ['Customer',customer],['Artwork Name',artwork],
     artNum && ['Art Number', '<span style="font-family:monospace;font-weight:600;color:#386641">'+artNum+'</span>'],
