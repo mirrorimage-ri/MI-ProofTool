@@ -137,6 +137,12 @@
   .upload-modal-section strong{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#888780;margin-bottom:4px}
   .upload-modal-file{font-family:monospace;font-size:11px;color:#0061fe;padding:2px 0;display:block}
   .upload-modal-btns{display:flex;gap:8px;justify-content:flex-end}
+  .pdf-preview-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:2000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;opacity:0;pointer-events:none;transition:opacity .2s}
+  .pdf-preview-overlay.visible{opacity:1;pointer-events:all}
+  .pdf-preview-box{background:#fff;border-radius:var(--rl);padding:1.25rem;max-width:900px;width:95%;max-height:90vh;display:flex;flex-direction:column;gap:12px}
+  .pdf-preview-box h3{font-size:15px;font-weight:600;color:#1a1a18;margin:0;flex-shrink:0}
+  .pdf-preview-iframe{width:100%;flex:1;border:1px solid #EDEDEB;border-radius:4px;min-height:500px}
+  .pdf-preview-btns{display:flex;gap:8px;justify-content:flex-end;flex-shrink:0}
   @media print{
     .app-header,.sidebar{display:none!important}
     .main{display:block}.preview-area{padding:0}
@@ -164,7 +170,7 @@
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:16px">
-    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v7r13</span></span>
+    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v7r14</span></span>
     <div class="db-status" id="dbStatus">
       <div class="db-dot checking" id="dbDot"></div>
       <span id="dbLabel">Checking DB…</span>
@@ -615,6 +621,10 @@ function getDbxFolder(artNum) {
 }
 let dbxToken   = localStorage.getItem('dbx_token') || null;
 let artFileObj = null;
+let _pendingBlob = null;
+let _pendingFolder = null;
+let _pendingArtFiles = [];
+let _pendingArtNum = null;
 
 
 
@@ -726,23 +736,101 @@ async function uploadToDropbox() {
       e.querySelector(".pl-loc").options[e.querySelector(".pl-loc").selectedIndex].text).join(", "));
   }
   if (missing.length) { alert("Please complete:\n\n" + missing.map(m => "  \u2022 " + m).join("\n")); return; }
+
+  // Make sure proof is generated
   if (document.getElementById("mainLayout").classList.contains("entry-mode")) {
-    await generateProof(); await new Promise(r => setTimeout(r, 800));
+    await generateProof();
+    await new Promise(r => setTimeout(r, 1000));
   }
-  const folder = getDbxFolder(artNum);
-  const artFiles = plEntries.filter(e => e._artFile);
-  const fileList = artFiles.map(e => {
-    const sfx = PLACEMENT_SUFFIX[e.querySelector(".pl-loc").value] || e.querySelector(".pl-loc").value.toUpperCase();
-    return artNum + "-" + sfx + "." + e._artFile.name.split(".").pop();
-  });
-  fileList.push(artNum + "_proof.pdf");
-  document.getElementById("modalFolder").textContent = folder;
-  document.getElementById("modalFiles").innerHTML = fileList.map(f => "<span class=\"upload-modal-file\">&#128196; " + f + "</span>").join("");
-  document.getElementById("modalProgress").style.display = "none";
-  document.getElementById("modalConfirmBtn").disabled = false;
-  document.getElementById("modalConfirmBtn").textContent = "Confirm Upload";
-  document.getElementById("uploadOverlay").classList.add("visible");
+
+  // Show generating status
+  const btn = document.getElementById("dbxUploadBtn");
+  const origText = btn.textContent;
+  btn.textContent = "Generating PDF...";
+  btn.disabled = true;
+
+  try {
+    // Generate the PDF blob
+    const blob = await generateProofBlob();
+
+    // Store for later upload
+    _pendingBlob      = blob;
+    _pendingArtNum    = artNum;
+    _pendingFolder    = getDbxFolder(artNum);
+    _pendingArtFiles  = plEntries.filter(e => e._artFile);
+
+    // Show PDF preview in overlay
+    const url = URL.createObjectURL(blob);
+    document.getElementById("pdfPreviewFrame").src = url;
+    document.getElementById("pdfPreviewTitle").textContent =
+      "Review Proof PDF — " + artNum;
+    document.getElementById("pdfUploadProgress").style.display = "none";
+    document.getElementById("pdfPreviewOverlay").classList.add("visible");
+
+    btn.textContent = origText;
+    btn.disabled = false;
+  } catch(err) {
+    alert("Error generating PDF: " + err.message);
+    btn.textContent = origText;
+    btn.disabled = false;
+  }
 }
+
+function cancelPdfUpload() {
+  document.getElementById("pdfPreviewOverlay").classList.remove("visible");
+  _pendingBlob = null;
+}
+
+async function proceedWithUpload() {
+  if (!_pendingBlob) { alert("No PDF generated."); return; }
+  const prog    = document.getElementById("pdfUploadProgress");
+  const upBtn   = document.querySelector(".pdf-preview-btns .btn:last-child");
+  prog.style.display = "block";
+  prog.style.color   = "#6A994E";
+  upBtn.disabled     = true;
+  upBtn.textContent  = "Uploading...";
+
+  try {
+    const total = _pendingArtFiles.length + 2;
+    let step = 1;
+
+    // Upload art files
+    for (const e of _pendingArtFiles) {
+      const loc   = e.querySelector(".pl-loc").value;
+      const sfx   = PLACEMENT_SUFFIX[loc] || loc.toUpperCase();
+      const file  = e._artFile;
+      const fname = _pendingArtNum + "-" + sfx + "." + file.name.split(".").pop();
+      prog.textContent = step + "/" + total + " Uploading " + fname + "...";
+      await dbxUploadFile(_pendingFolder + "/" + fname, file);
+      step++;
+    }
+
+    // Upload PDF
+    prog.textContent = step + "/" + total + " Uploading proof PDF...";
+    await dbxUploadFile(_pendingFolder + "/" + _pendingArtNum + "_proof.pdf", _pendingBlob);
+    step++;
+
+    // Shared link
+    prog.textContent = step + "/" + total + " Creating link...";
+    const link = await dbxGetOrCreateLink(_pendingFolder);
+    if (link) document.getElementById("dropboxLink").value = link;
+
+    prog.textContent = "\u2713 Done! Uploaded to " + _pendingArtNum;
+    prog.style.color = "#386641";
+    upBtn.textContent = "\u2713 Done";
+    setTimeout(() => {
+      document.getElementById("pdfPreviewOverlay").classList.remove("visible");
+      _pendingBlob = null;
+    }, 2500);
+
+  } catch(err) {
+    prog.textContent  = "Error: " + err.message;
+    prog.style.color  = "#BC4749";
+    upBtn.disabled    = false;
+    upBtn.textContent = "Retry";
+  }
+}
+
 
 function closeUploadModal() { document.getElementById("uploadOverlay").classList.remove("visible"); }
 
@@ -1183,6 +1271,18 @@ window.addEventListener("load", function() {
 
 
 </script>
+<div class="pdf-preview-overlay" id="pdfPreviewOverlay">
+  <div class="pdf-preview-box">
+    <h3 id="pdfPreviewTitle">Proof PDF Preview</h3>
+    <iframe class="pdf-preview-iframe" id="pdfPreviewFrame"></iframe>
+    <div style="font-size:12px;color:#888780">Review the proof above. Click <strong>Upload to Dropbox</strong> to proceed or <strong>Cancel</strong> to go back.</div>
+    <div class="pdf-preview-btns">
+      <button class="btn btn-secondary" onclick="cancelPdfUpload()">Cancel</button>
+      <button class="btn" style="background:#386641;color:#fff;font-weight:600;border:none" onclick="proceedWithUpload()">Upload to Dropbox</button>
+    </div>
+    <div id="pdfUploadProgress" style="font-size:12px;color:#6A994E;display:none;text-align:center"></div>
+  </div>
+</div>
 <div class="upload-overlay" id="uploadOverlay">
   <div class="upload-modal">
     <h3>Confirm Dropbox Upload</h3>
