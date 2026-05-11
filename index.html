@@ -95,7 +95,7 @@
   .pl-hdr{font-size:12px;font-weight:600;color:#1a1a18;margin-bottom:8px;padding-right:20px}
 
   /* PROOF */
-  .proof-wrap{background:#FFFFFF;border:1px solid #EDEDEB;border-radius:var(--rl);overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08);width:100%;max-width:860px;margin:0 auto;display:flex;flex-direction:column;aspect-ratio:8.5/11}
+  .proof-wrap{background:#FFFFFF;border:1px solid #EDEDEB;border-radius:var(--rl);overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08);width:100%;max-width:860px;margin:0 auto;display:block;}
   .proof-hdr{background:#FFFFFF;border-bottom:1px solid #EDEDEB;padding:12px 16px;display:flex;align-items:center;gap:14px}
   .proof-logo{height:50px;width:50px;border-radius:50%;object-fit:cover}
   .proof-co-name{font-size:15px;font-weight:700;color:#000;letter-spacing:.02em;}
@@ -104,15 +104,15 @@
   .proof-meta{padding:7px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #EDEDEB;background:#F8F8F6;flex-shrink:0}
   .proof-meta-info{font-family:var(--mono);font-size:12px;color:#386641}
   .proof-pl-bar{padding:10px 16px;background:#F0F7EC;border-bottom:1px solid #D3D1C7;font-size:12px;color:#386641;font-weight:500;display:flex;gap:12px;flex-wrap:wrap}
-  .proof-mockups{display:flex;gap:16px;padding:20px;justify-content:center;flex-wrap:nowrap;align-items:center;background:#E8E8E6;border-radius:0;flex:1;min-height:320px;overflow:hidden}
+  .proof-mockups{display:flex;gap:16px;padding:20px;justify-content:center;flex-wrap:nowrap;align-items:center;background:#E8E8E6;border-radius:0;height:420px;overflow:hidden;}
   .proof-mockup-item{display:flex;flex-direction:column;align-items:center;gap:8px}
   .proof-mockup-img-wrap{
     display:flex;align-items:center;justify-content:center;
     background:#E8E8E6;
     border-radius:4px;overflow:hidden;
-    width:100%;height:100%;
+    flex:1;height:380px;
   }
-  .proof-mockup-img-wrap img{display:block;width:100%;height:100%;object-fit:contain;}
+  .proof-mockup-img-wrap img{display:block;max-height:380px;max-width:380px;width:auto;height:auto;object-fit:contain;}
   .proof-mockup-lbl{font-size:11px;color:#6A994E;font-family:var(--mono)}
   .proof-details{padding:10px 16px;border-top:1px solid #EDEDEB;display:grid;grid-template-columns:1fr 1fr;gap:6px;flex-shrink:0}
   .proof-di label{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#386641;font-weight:600}
@@ -170,7 +170,7 @@
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:16px">
-    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v7r16</span></span>
+    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v7r17</span></span>
     <div class="db-status" id="dbStatus">
       <div class="db-dot checking" id="dbDot"></div>
       <span id="dbLabel">Checking DB…</span>
@@ -875,409 +875,88 @@ async function confirmUpload() {
 addPlacement();
 
 function exportPDF() {
-  const el = document.getElementById('proofOutput');
-  if (!el) return;
   const btn = document.querySelector('.btn-orange');
   const origText = btn.innerHTML;
   btn.innerHTML = 'Generating...';
   btn.disabled = true;
-  const savedStyle = el.getAttribute('style') || '';
-  el.style.cssText = 'width:800px !important; max-width:800px !important; aspect-ratio:unset !important; display:flex !important; flex-direction:column !important;';
-  const mx = document.getElementById('proofMockups');
-  const savedMx = mx ? mx.getAttribute('style') || '' : '';
-  if (mx) mx.style.cssText = 'display:flex !important; height:420px !important; overflow:hidden !important; background:#E8E8E6 !important; padding:16px !important; align-items:center !important; justify-content:center !important;';
-  setTimeout(() => {
-    const opt = {
-      margin: [8,8,8,8],
-      filename: (document.getElementById('jobNumber').value||'proof')+'_'+(document.getElementById('customerName').value||'customer').replace(/\s+/g,'')+'.pdf',
-      image: {type:'jpeg',quality:0.98},
-      html2canvas: {scale:2.5,useCORS:true,backgroundColor:'#ffffff',logging:false,windowWidth:816},
-      jsPDF: {unit:'mm',format:'letter',orientation:'portrait'},
-      pagebreak: {mode:'avoid-all'}
-    };
-    html2pdf().set(opt).from(el).save().then(() => {
-      el.setAttribute('style', savedStyle);
-      if (mx) mx.setAttribute('style', savedMx);
-      btn.innerHTML = origText;
-      btn.disabled = false;
-    });
-  }, 800);
-}
-
-
-function clearForm() {
-  if(!confirm('Clear all form data?')) return;
-  document.getElementById('mainLayout').classList.remove('split-mode');
-  document.getElementById('mainLayout').classList.add('entry-mode');
-  document.getElementById('proofHint').style.display='block';
-
-  ['customerName','artworkName','jobNumber','garmentStyle','dropboxLink','notes'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('proofDate').valueAsDate=new Date();
-  uploads=[]; renderThumbs();
-  document.getElementById('plEntries').innerHTML='';
-  plCount=0;
-  const af=document.getElementById('artNumber'); af.value=''; af.dataset.claimed='false'; af.style.color='#386641';
-  document.getElementById('artNumStatus').textContent='';
-  document.getElementById('proofMetaL').textContent='—';
-  document.getElementById('proofMetaR').textContent='—';
-  document.getElementById('proofHdrRight').innerHTML='';
-  document.getElementById('proofPlBar').style.display='none';
-  document.getElementById('proofMockups').innerHTML='<div style="color:var(--gray-400);font-size:13px;display:flex;align-items:center;gap:8px;padding:3rem 0">&#128247; Upload mockup images and click Generate Proof</div>';
-  document.getElementById('proofDetails').style.display='none';
-  document.getElementById('proofDetails').innerHTML='';
-}
-
-
-
-
-(function handleOAuthReturn() {
-  const hash = window.location.hash;
-  if (hash.includes('access_token=')) {
-    const params = new URLSearchParams(hash.replace('#','?'));
-    const token = params.get('access_token');
-    if (token) { dbxToken = token; localStorage.setItem('dbx_token', token); history.replaceState(null,'',window.location.pathname); }
-  }
-  updateDbxUI();
-})();
-
-
-
-artZone.addEventListener('dragover', e=>{ e.preventDefault(); artZone.classList.add('dragover'); });
-artZone.addEventListener('dragleave', ()=>artZone.classList.remove('dragover'));
-artZone.addEventListener('drop', e=>{ e.preventDefault(); artZone.classList.remove('dragover'); if(e.dataTransfer.files[0]) setArtFile(e.dataTransfer.files[0]); });
-
-
-
-
-
-
-
-
-
-
-
-
-addPlacement();
-
-
-
-
-// ── Supabase ──────────────────────────────────────────────────────────────
-
-(function handleOAuthReturn() {
-  const hash = window.location.hash;
-  if (hash.includes('access_token=')) {
-    const params = new URLSearchParams(hash.replace('#','?'));
-    const token = params.get('access_token');
-    if (token) { dbxToken = token; localStorage.setItem('dbx_token', token); history.replaceState(null,'',window.location.pathname); }
-  }
-  updateDbxUI();
-})();
-
-
-
-artZone.addEventListener('dragover', e=>{ e.preventDefault(); artZone.classList.add('dragover'); });
-artZone.addEventListener('dragleave', ()=>artZone.classList.remove('dragover'));
-artZone.addEventListener('drop', e=>{ e.preventDefault(); artZone.classList.remove('dragover'); if(e.dataTransfer.files[0]) setArtFile(e.dataTransfer.files[0]); });
-
-
-
-
-
-
-
-
-
-
-addPlacement();
-
-
-
-
-// ── Supabase ──────────────────────────────────────────────────────────────
-// Returns the primary decoration method from the first placement entry
-function getPrimaryMethod() {
-  const first = document.querySelector('.pl-method');
-  return first ? first.value : 'Screenprint';
-}
-
-// Build art number string from counter number + form fields
-function buildArtNumber(num, method, customer, artwork) {
-  const prefix = METHOD_PREFIX[method.toLowerCase()] ?? '';
-  const store  = customer.replace(/\s+/g, '').replace(/[^a-zA-Z0-9_-]/g, '') || 'Store';
-  const design = artwork.replace(/\s+/g, '').replace(/[^a-zA-Z0-9_-]/g, '')  || 'Design';
-  return `${prefix}${num}Store_${store}_${design}`;
-}
-
-// Preview art number (does NOT increment counter)
-async function previewArtNumber() {
-  const status = document.getElementById('artNumStatus');
-  const field  = document.getElementById('artNumber');
-  const method   = getPrimaryMethod();
-  const customer = document.getElementById('customerName').value || 'Customer';
-  const artwork  = document.getElementById('artworkName').value  || 'Artwork';
-
-  status.textContent = 'Loading…';
-  status.style.color = '#888780';
-
-  try {
-    // Use raw fetch with explicit CORS headers to avoid Supabase JS client issues
-    const resp = await fetch(
-      SUPABASE_URL + '/rest/v1/art_counters?select=next_number&method=eq.' + method.toLowerCase(),
-      {
-        method: 'GET',
-        headers: {
-          'apikey': SUPABASE_KEY,
-          'Authorization': 'Bearer ' + SUPABASE_KEY,
-          'Content-Type': 'application/json',
-        },
-        mode: 'cors',
-      }
-    );
-    if (!resp.ok) throw new Error('HTTP ' + resp.status + ': ' + await resp.text());
-    const rows = await resp.json();
-    if (!rows.length) throw new Error('Method not found: ' + method);
-
-    const preview = buildArtNumber(rows[0].next_number, method, customer, artwork);
-    field.value = preview;
-    field.style.color = '#888780';
-    status.textContent = '(preview — not saved)';
-    status.style.color = '#888780';
-  } catch(err) {
-    status.textContent = 'Error: ' + err.message;
-    status.style.color = '#BC4749';
-  }
-}
-
-// Claim a real art number (increments counter, saves to DB)
-async function claimAndSaveArtNumber(proofData) {
-  const method = getPrimaryMethod();
-
-  // Step 1: Claim next number via RPC using raw fetch
-  const rpcResp = await fetch(SUPABASE_URL + '/rest/v1/rpc/claim_art_number', {
-    method: 'POST',
-    headers: {
-      'apikey': SUPABASE_KEY,
-      'Authorization': 'Bearer ' + SUPABASE_KEY,
-      'Content-Type': 'application/json',
-    },
-    mode: 'cors',
-    body: JSON.stringify({ p_method: method.toLowerCase() }),
+  const fname = (document.getElementById('artNumber').value ||
+    (document.getElementById('jobNumber').value || 'proof') + '_' +
+    (document.getElementById('customerName').value || 'customer').replace(/\s+/g,'')) + '.pdf';
+  generateProofBlob().then(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fname;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    btn.innerHTML = origText; btn.disabled = false;
+  }).catch(err => {
+    alert('PDF error: ' + err.message);
+    btn.innerHTML = origText; btn.disabled = false;
   });
-  if (!rpcResp.ok) throw new Error('RPC error ' + rpcResp.status + ': ' + await rpcResp.text());
-  const numData = await rpcResp.json();
-
-  const artNum = buildArtNumber(numData, method, proofData.customer_name, proofData.artwork_name);
-
-  // Step 2: Save proof record via raw fetch
-  const saveResp = await fetch(SUPABASE_URL + '/rest/v1/proofs', {
-    method: 'POST',
-    headers: {
-      'apikey': SUPABASE_KEY,
-      'Authorization': 'Bearer ' + SUPABASE_KEY,
-      'Content-Type': 'application/json',
-      'Prefer': 'return=minimal',
-    },
-    mode: 'cors',
-    body: JSON.stringify({
-      art_number:    artNum,
-      method:        method,
-      customer_name: proofData.customer_name,
-      artwork_name:  proofData.artwork_name,
-      job_number:    proofData.job_number  || null,
-      garment:       proofData.garment     || null,
-      dropbox_link:  proofData.dropbox_link|| null,
-      notes:         proofData.notes       || null,
-      placements:    proofData.placements  || [],
-    }),
-  });
-  if (!saveResp.ok) throw new Error('Save error ' + saveResp.status + ': ' + await saveResp.text());
-
-  return artNum;
-}
-// ── End Supabase ──────────────────────────────────────────────────────────
-
-// ── DB Status + Previous Jobs ─────────────────────────────────────────────────
-async function checkDBStatus() {
-  const dot   = document.getElementById('dbDot');
-  const label = document.getElementById('dbLabel');
-  try {
-    const resp = await fetch(
-      SUPABASE_URL + '/rest/v1/art_counters?select=method&limit=1',
-      { method:'GET', headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY}, mode:'cors' }
-    );
-    if (resp.ok) {
-      dot.className = 'db-dot online';
-      label.textContent = 'DB Online';
-      loadPreviousJobs(); // populate dropdown now we know DB is up
-    } else {
-      dot.className = 'db-dot offline';
-      label.textContent = 'DB Error ' + resp.status;
-    }
-  } catch(e) {
-    dot.className = 'db-dot offline';
-    label.textContent = 'DB Offline';
-  }
-}
-
-async function loadPreviousJobs() {
-  try {
-    const resp = await fetch(
-      SUPABASE_URL + '/rest/v1/proofs?select=id,art_number,customer_name,artwork_name,job_number,garment,dropbox_link,notes,placements,method,created_at&order=created_at.desc&limit=50',
-      { method:'GET', headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json'}, mode:'cors' }
-    );
-    if (!resp.ok) return;
-    const jobs = await resp.json();
-    const sel = document.getElementById('loadJobSelect');
-    // Clear existing options except the first placeholder
-    while (sel.options.length > 1) sel.remove(1);
-    jobs.forEach(j => {
-      const opt = document.createElement('option');
-      opt.value = JSON.stringify(j);
-      const date = new Date(j.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-      opt.textContent = (j.art_number || j.job_number || j.id) + ' — ' + j.customer_name + ' / ' + j.artwork_name + ' (' + date + ')';
-      sel.appendChild(opt);
-    });
-  } catch(e) {
-    console.warn('Could not load previous jobs:', e);
-  }
-}
-
-function loadJob(val) {
-  if (!val) return;
-  const j = JSON.parse(val);
-
-  // Switch to entry mode first
-  document.getElementById('mainLayout').classList.remove('split-mode');
-  document.getElementById('mainLayout').classList.add('entry-mode');
-  document.getElementById('proofHint').style.display = 'block';
-
-  // Fill form fields
-  document.getElementById('customerName').value  = j.customer_name  || '';
-  document.getElementById('artworkName').value   = j.artwork_name   || '';
-  document.getElementById('jobNumber').value     = j.job_number     || '';
-  document.getElementById('garmentStyle').value  = j.garment        || '';
-  document.getElementById('dropboxLink').value   = j.dropbox_link   || '';
-  document.getElementById('notes').value         = j.notes          || '';
-
-  // Reset art number — a new proof will get a new number
-  const af = document.getElementById('artNumber');
-  af.value = ''; af.dataset.claimed = 'false'; af.style.color = '#386641';
-  document.getElementById('artNumStatus').textContent = '(loaded from previous — new number on Generate)';
-  document.getElementById('artNumStatus').style.color = '#888780';
-
-  // Re-populate placements
-  document.getElementById('plEntries').innerHTML = '';
-  plCount = 0;
-  const placements = Array.isArray(j.placements) ? j.placements : [];
-  if (placements.length) {
-    placements.forEach(p => {
-      addPlacement();
-      const entries = document.querySelectorAll('.pl-entry');
-      const entry = entries[entries.length - 1];
-      // Set location dropdown
-      const locSel = entry.querySelector('.pl-loc');
-      Array.from(locSel.options).forEach(opt => {
-        if (opt.text === p.loc) { locSel.value = opt.value; }
-      });
-      onLocChange(locSel);
-      entry.querySelector('.pl-w').value      = p.w      || '';
-      entry.querySelector('.pl-h').value      = p.h      || '';
-      entry.querySelector('.pl-collar').value = p.collar || '';
-      entry.querySelector('.pl-center').value = p.center || '';
-      entry.querySelector('.pl-desc').value   = p.desc   || '';
-      // Set method dropdown
-      const mSel = entry.querySelector('.pl-method');
-      Array.from(mSel.options).forEach(opt => {
-        if (opt.text === p.method || opt.value === p.method) { mSel.value = opt.value; }
-      });
-      entry.querySelector('.pl-colors').value = p.colors || '';
-    });
-  } else {
-    addPlacement();
-  }
-
-  // Reset select back to placeholder
-  document.getElementById('loadJobSelect').value = '';
-
-  // Clear mockups (user must re-upload)
-  uploads = []; renderThumbs();
-  // Clear proof panel
-  document.getElementById('proofMockups').innerHTML = '<div style="color:#6A994E;font-size:13px;display:flex;align-items:center;gap:8px;padding:3rem 0">&#128247; Upload mockup images and click Generate Proof</div>';
-  document.getElementById('proofDetails').style.display = 'none';
-  document.getElementById('proofPlBar').style.display = 'none';
 }
 
 async function generateProofBlob() {
-  const el = document.getElementById('proofOutput');
+  // Build a clean self-contained snapshot div with fixed pixel dimensions
+  const source = document.getElementById('proofOutput');
 
-  // Pre-convert all blob/data URL images to canvas elements so html2canvas can read them
-  const imgs = Array.from(el.querySelectorAll('img'));
-  const savedSrcs = imgs.map(img => img.src);
+  // Create isolated container
+  const wrapper = document.createElement('div');
+  wrapper.style.cssText = 'position:fixed;top:-99999px;left:-99999px;width:800px;background:#fff;z-index:-9999;font-family:DM Sans,sans-serif;';
+  document.body.appendChild(wrapper);
 
-  await Promise.all(imgs.map(img => new Promise(res => {
-    if (!img.src) { res(); return; }
-    const c = document.createElement('canvas');
-    c.width  = img.naturalWidth  || img.offsetWidth  || 300;
-    c.height = img.naturalHeight || img.offsetHeight || 300;
-    const ctx = c.getContext('2d');
-    const tmp = new Image();
-    tmp.crossOrigin = 'anonymous';
-    tmp.onload  = () => { ctx.drawImage(tmp, 0, 0, c.width, c.height); img.src = c.toDataURL('image/jpeg', 0.92); res(); };
-    tmp.onerror = () => res();
-    tmp.src = img.src;
-  })));
+  // Clone and style
+  const clone = source.cloneNode(true);
+  clone.style.cssText = 'width:800px;display:block;';
 
-  // Snapshot the proof at fixed size
-  const savedStyle = el.getAttribute('style') || '';
-  el.style.cssText = 'width:816px!important;max-width:816px!important;aspect-ratio:unset!important;display:block!important;position:relative!important;';
-  const mx = el.querySelector('#proofMockups');
-  const savedMx = mx ? (mx.getAttribute('style') || '') : '';
-  if (mx) mx.style.cssText = 'display:flex!important;height:400px!important;overflow:hidden!important;background:#E8E8E6!important;padding:16px!important;align-items:center!important;justify-content:center!important;gap:16px!important;';
+  // Fix mockup area to fixed height
+  const mxClone = clone.querySelector('#proofMockups');
+  if (mxClone) {
+    mxClone.style.cssText = 'display:flex;height:380px;background:#E8E8E6;padding:16px;align-items:center;justify-content:center;gap:16px;overflow:hidden;';
+    // Fix each image item
+    mxClone.querySelectorAll('.proof-mockup-item').forEach(item => {
+      item.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:6px;flex:1;height:100%;';
+    });
+    mxClone.querySelectorAll('.proof-mockup-img-wrap').forEach(wrap => {
+      wrap.style.cssText = 'display:flex;align-items:center;justify-content:center;background:#E8E8E6;flex:1;height:340px;overflow:hidden;';
+    });
+    mxClone.querySelectorAll('img').forEach(img => {
+      img.style.cssText = 'max-height:320px;max-width:320px;width:auto;height:auto;object-fit:contain;display:block;';
+      img.crossOrigin = 'anonymous';
+    });
+  }
 
-  await new Promise(r => setTimeout(r, 400));
+  // Remove aspect-ratio from proof wrap in clone
+  clone.style.aspectRatio = 'unset';
+  wrapper.appendChild(clone);
+
+  // Wait for images to be ready
+  await new Promise(r => setTimeout(r, 600));
 
   return new Promise((resolve, reject) => {
-    // Use html2canvas to capture
-    const script = document.createElement('script');
-    // html2canvas is loaded via html2pdf bundle — access it directly
-    const h2p = window.html2pdf;
-    h2p().set({
-      margin: [8,8,8,8],
-      image: {type:'jpeg', quality:0.95},
+    html2pdf().set({
+      margin: [8, 8, 8, 8],
+      image: { type: 'jpeg', quality: 0.95 },
       html2canvas: {
-        scale: 2,
+        scale: 1.5,
         useCORS: true,
         allowTaint: true,
         backgroundColor: '#ffffff',
         logging: false,
-        windowWidth: 816,
-        onclone: (clonedDoc) => {
-          // In the clone, make sure images have explicit sizes
-          clonedDoc.querySelectorAll('.proof-mockup-img-wrap img').forEach(img => {
-            img.style.cssText = 'max-width:350px;max-height:350px;width:auto;height:auto;display:block;object-fit:contain;';
-          });
-          clonedDoc.querySelectorAll('.proof-mockup-img-wrap').forEach(wrap => {
-            wrap.style.cssText = 'display:flex;align-items:center;justify-content:center;background:#E8E8E6;width:350px;height:350px;';
-          });
-        }
+        windowWidth: 800,
       },
-      jsPDF: {unit:'mm', format:'letter', orientation:'portrait'},
-      pagebreak: {mode:'avoid-all'}
-    }).from(el).outputPdf('blob').then(blob => {
-      // Restore everything
-      el.setAttribute('style', savedStyle);
-      if (mx) mx.setAttribute('style', savedMx);
-      imgs.forEach((img, i) => { img.src = savedSrcs[i]; });
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      pagebreak: { mode: 'avoid-all' },
+    }).from(clone).outputPdf('blob').then(blob => {
+      document.body.removeChild(wrapper);
       resolve(blob);
     }).catch(err => {
-      el.setAttribute('style', savedStyle);
-      if (mx) mx.setAttribute('style', savedMx);
-      imgs.forEach((img, i) => { img.src = savedSrcs[i]; });
+      if (document.body.contains(wrapper)) document.body.removeChild(wrapper);
       reject(err);
     });
   });
 }
+
 
 </script>
 <div class="pdf-preview-overlay" id="pdfPreviewOverlay">
