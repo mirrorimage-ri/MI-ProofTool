@@ -24,7 +24,7 @@
   .logo-area{display:flex;align-items:center;gap:10px}
   .logo-img{height:46px;width:46px;border-radius:50%;object-fit:cover}
   .logo-text{display:flex;flex-direction:column;line-height:1.1}
-  .logo-text .brand{font-size:15px;font-weight:600;color:#386641;letter-spacing:.02em;font-weight:700;}
+  .logo-text .brand{font-size:15px;font-weight:700;color:#000;letter-spacing:.02em;}
   .logo-text .sub{font-size:10px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.07em}
   .header-title{font-size:13px;color:#6A994E;font-weight:500;letter-spacing:.05em;text-transform:uppercase}
   .db-status{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:#888780;padding:0 4px}
@@ -38,10 +38,10 @@
   .load-job-wrap select:focus{border-color:#6A994E;box-shadow:0 0 0 3px rgba(106,153,78,.1)}
 
   /* BUTTONS */
-  .btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:var(--r);font-family:var(--font);font-size:13px;font-weight:500;cursor:pointer;border:none;transition:all .15s}
-  .btn-primary{background:#386641;color:#fff;font-weight:600}.btn-primary:hover{background:#2a4d30}
-  .btn-secondary{background:#FFFFFF;color:#444441;border:1px solid #D3D1C7}.btn-secondary:hover{background:#F8F8F6;border-color:#6A994E}
-  .btn-orange{background:#386641;color:#1a2332;border:1px solid #386641}.btn-orange:hover{background:#386641;color:#1a2332}
+  .btn{display:inline-flex;align-items:center;gap:6px;padding:8px 18px;border-radius:var(--r);font-family:var(--font);font-size:13px;font-weight:500;cursor:pointer;border:none;transition:all .15s;white-space:nowrap}
+  .btn-primary{background:#386641;color:#fff;font-weight:600;border:1px solid #386641}.btn-primary:hover{background:#2a4d30;border-color:#2a4d30}
+  .btn-secondary{background:#fff;color:#386641;font-weight:600;border:1.5px solid #386641}.btn-secondary:hover{background:#f0f7ec;border-color:#2a4d30}
+  .btn-orange{background:#6A994E;color:#fff;font-weight:600;border:1px solid #6A994E}.btn-orange:hover{background:#386641;border-color:#386641}
 
   /* LAYOUT */
   .main{display:flex;min-height:calc(100vh - 64px);transition:all .3s ease}
@@ -64,7 +64,7 @@
   /* FORM */
   .row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
   .row.full{grid-template-columns:1fr}
-  .field label{display:block;font-size:12px;font-weight:500;color:#386641;margin-bottom:4px}
+  .field label{display:block;font-size:12px;font-weight:500;color:#1a1a18;margin-bottom:4px}
   .field input,.field select,.field textarea{width:100%;padding:7px 10px;border:1px solid #D3D1C7;border-radius:var(--r);font-family:var(--font);font-size:13px;color:#386641;background:#FFFFFF;transition:border-color .15s;outline:none}
   .field input:focus,.field select:focus,.field textarea:focus{border-color:#386641;box-shadow:0 0 0 3px rgba(56,102,65,.15)}
   .field textarea{resize:vertical;min-height:60px}
@@ -86,32 +86,43 @@
   .pl-entry{background:#F8F8F6;border:1px solid #EDEDEB;border-radius:var(--r);padding:10px;margin-bottom:8px;position:relative}
   .pl-entry .rm-btn{position:absolute;top:8px;right:8px;background:transparent;border:none;color:#6A994E;cursor:pointer;font-size:18px;line-height:1;padding:0}
   .pl-entry .rm-btn:hover{color:#386641}
-  .pl-hdr{font-size:12px;font-weight:600;color:#386641;margin-bottom:8px;padding-right:20px}
+  .pl-hdr{font-size:12px;font-weight:600;color:#1a1a18;margin-bottom:8px;padding-right:20px}
 
   /* PROOF */
   .proof-wrap{background:#FFFFFF;border:1px solid #EDEDEB;border-radius:var(--rl);overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08)}
   .proof-hdr{background:#FFFFFF;border-bottom:1px solid #EDEDEB;padding:12px 16px;display:flex;align-items:center;gap:14px}
   .proof-logo{height:50px;width:50px;border-radius:50%;object-fit:cover}
-  .proof-co-name{font-size:15px;font-weight:700;color:#386641;letter-spacing:.02em;font-weight:700;}
+  .proof-co-name{font-size:15px;font-weight:700;color:#000;letter-spacing:.02em;}
   .proof-co-sub{font-size:10px;color:#6A994E;text-transform:uppercase;letter-spacing:.08em;margin-top:1px}
   .proof-co-contact{font-size:10px;color:#6A994E;margin-top:1px}
-  .proof-meta{padding:10px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #EDEDEB;background:#F8F8F6}
+  .proof-meta{padding:7px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #EDEDEB;background:#F8F8F6;flex-shrink:0}
   .proof-meta-info{font-family:var(--mono);font-size:12px;color:#386641}
   .proof-pl-bar{padding:10px 16px;background:#F0F7EC;border-bottom:1px solid #D3D1C7;font-size:12px;color:#386641;font-weight:500;display:flex;gap:12px;flex-wrap:wrap}
-  .proof-mockups{display:flex;gap:16px;padding:20px;justify-content:center;flex-wrap:wrap;min-height:260px;align-items:center;background:#E8E8E6;border-radius:0}
+  .proof-mockups{display:flex;gap:12px;padding:16px;justify-content:center;flex-wrap:wrap;align-items:center;background:#E8E8E6;border-radius:0;flex:1;min-height:0;overflow:hidden}
   .proof-mockup-item{display:flex;flex-direction:column;align-items:center;gap:8px}
   .proof-mockup-img-wrap{
     display:inline-flex;align-items:center;justify-content:center;
     background:#E8E8E6;
     border-radius:4px;overflow:hidden;
+    flex:1;min-width:0;height:100%;
   }
-  .proof-mockup-img-wrap img{display:block;max-height:280px;max-width:280px;object-fit:contain;position:relative;}
+  .proof-mockup-img-wrap img{display:block;width:100%;height:100%;object-fit:contain;position:relative;}
   .proof-mockup-lbl{font-size:11px;color:#6A994E;font-family:var(--mono)}
-  .proof-details{padding:12px 16px;border-top:1px solid #EDEDEB;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .proof-details{padding:10px 16px;border-top:1px solid #EDEDEB;display:grid;grid-template-columns:1fr 1fr;gap:6px;flex-shrink:0}
   .proof-di label{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#386641;font-weight:600}
   .proof-di p{font-size:13px;color:#386641;margin-top:1px}
-  .proof-footer{padding:10px 16px;background:#F8F8F6;border-top:1px solid #EDEDEB;font-size:11px;color:#888780;display:flex;justify-content:space-between}
+  .proof-footer{padding:8px 16px;background:#F8F8F6;border-top:1px solid #EDEDEB;font-size:11px;color:#888780;display:flex;justify-content:space-between;flex-shrink:0}
 
+  .dbx-connect-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--r);font-family:var(--font);font-size:12px;font-weight:600;cursor:pointer;border:1.5px solid #0061fe;background:#fff;color:#0061fe;transition:all .15s}
+  .dbx-connect-btn:hover{background:#0061fe;color:#fff}
+  .dbx-connect-btn.connected{border-color:#6A994E;color:#386641;background:#f0f7ec}
+  .art-upload-zone{border:2px dashed #D3D1C7;border-radius:var(--rl);padding:1rem;text-align:center;cursor:pointer;transition:all .15s;background:#F8F8F6;position:relative;margin-top:8px}
+  .art-upload-zone:hover,.art-upload-zone.dragover{border-color:#0061fe;background:#f0f4ff}
+  .art-upload-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+  .art-file-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:#e8f0fe;border:1px solid #0061fe;border-radius:20px;font-size:12px;color:#0061fe;font-family:var(--mono);margin-top:6px}
+  .art-file-chip .rm{background:none;border:none;color:#0061fe;cursor:pointer;font-size:14px;padding:0;line-height:1}
+  .dbx-progress{font-size:12px;color:#6A994E;margin-top:6px;display:none}
+  .dbx-status-row{display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap}
   @media print{
     .app-header,.sidebar{display:none!important}
     .main{display:block}.preview-area{padding:0}
@@ -139,7 +150,7 @@
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:16px">
-    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v6r3</span></span>
+    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v7r2</span></span>
     <div class="db-status" id="dbStatus">
       <div class="db-dot checking" id="dbDot"></div>
       <span id="dbLabel">Checking DB…</span>
@@ -177,7 +188,7 @@
       <div class="field" style="display:flex;align-items:flex-end;gap:8px">
         <div style="flex:1">
           <label>Art Number <span id="artNumStatus" style="font-weight:400;font-size:11px;color:#6A994E"></span></label>
-          <input type="text" id="artNumber" readonly style="background:#F8F8F6;cursor:default;font-family:var(--mono);font-weight:600;color:#386641;letter-spacing:.02em" placeholder="Auto-generated on Generate Proof">
+          <input type="text" id="artNumber" style="background:#fff;font-family:var(--mono);font-weight:600;color:#386641;letter-spacing:.02em" placeholder="Auto-generated on Generate Proof">
         </div>
         <button type="button" class="btn btn-secondary" onclick="previewArtNumber()" style="flex-shrink:0;white-space:nowrap;margin-bottom:0">Preview</button>
       </div>
@@ -199,6 +210,31 @@
       <div style="font-size:11px;color:#6A994E;margin-top:4px">PNG, JPG, PDF &middot; Multiple files for color variants</div>
     </div>
     <div class="thumbs" id="thumbs"></div>
+  </div>
+
+  <div class="card">
+    <div class="sec-title">Dropbox</div>
+    <div class="dbx-status-row">
+      <button class="dbx-connect-btn" id="dbxConnectBtn" onclick="dbxConnect()">Connect Dropbox</button>
+      <span id="dbxUserLabel" style="font-size:11px;color:#6A994E;display:none"></span>
+    </div>
+    <div style="margin-top:12px">
+      <label style="font-size:12px;font-weight:500;color:#1a1a18;display:block;margin-bottom:4px">Art File <span style="font-weight:400;color:#888780;font-size:11px">(drag to upload)</span></label>
+      <div class="art-upload-zone" id="artUploadZone">
+        <input type="file" id="artFileInput" onchange="handleArtFile(event)">
+        <div style="font-size:13px;color:#888780">Drop artwork file or <strong style="color:#0061fe">click to browse</strong></div>
+        <div style="font-size:11px;color:#888780;margin-top:3px">AI, SVG, PNG, PDF, PSD...</div>
+      </div>
+      <div id="artFileChip" style="display:none"></div>
+      <div class="dbx-progress" id="dbxProgress"></div>
+    </div>
+    <div style="margin-top:10px">
+      <button class="btn" onclick="uploadToDropbox()"
+        style="width:100%;background:#0061fe;color:#fff;font-weight:600;border:none;justify-content:center"
+        id="dbxUploadBtn" disabled>
+        &#8679; Upload Art + Proof to Dropbox
+      </button>
+    </div>
   </div>
 
   <div class="card">
@@ -432,7 +468,15 @@ async function generateProof() {
   } else { bar.style.display='none'; }
   const mx=document.getElementById('proofMockups');
   if(uploads.length){
-    mx.innerHTML=uploads.map(f=>'<div class="proof-mockup-item">'+(f.type==='application/pdf'?'<div class="proof-mockup-img-wrap"><div style="width:220px;height:260px;display:flex;align-items:center;justify-content:center;font-size:12px;color:#888780">PDF: '+f.name+'</div></div>':'<div class="proof-mockup-img-wrap"><img src="'+f.url+'" alt="'+f.name+'"></div>')+'<div class="proof-mockup-lbl">'+f.name.replace(/\.[^.]+$/,'')+'</div></div>').join('');
+    const count = uploads.length;
+    // Scale images to fill space — single image gets max width, multiples share proportionally
+    const imgStyle = count === 1
+      ? 'max-width:100%;max-height:100%;width:auto;height:100%;object-fit:contain'
+      : 'max-width:100%;max-height:100%;width:auto;height:100%;object-fit:contain';
+    const itemStyle = count === 1
+      ? 'display:flex;flex-direction:column;align-items:center;gap:6px;flex:1;height:100%;min-width:0'
+      : 'display:flex;flex-direction:column;align-items:center;gap:6px;flex:1;height:100%;min-width:0;max-width:' + Math.floor(90/count) + '%';
+    mx.innerHTML=uploads.map(f=>'<div class="proof-mockup-item" style="'+itemStyle+'">'+(f.type==='application/pdf'?'<div class="proof-mockup-img-wrap" style="width:100%;height:100%"><div style="display:flex;align-items:center;justify-content:center;font-size:12px;color:#888780;height:100%">PDF: '+f.name+'</div></div>':'<div class="proof-mockup-img-wrap" style="width:100%;height:100%"><img src="'+f.url+'" alt="'+f.name+'" style="'+imgStyle+'"></div>')+'<div class="proof-mockup-lbl">'+f.name.replace(/\.[^.]+$/,'')+'</div></div>').join('');
   } else { mx.innerHTML='<div style="color:#6A994E;font-size:13px;padding:3rem 0">No mockup images uploaded.</div>'; }
   const dt=document.getElementById('proofDetails');
   const fields=[
@@ -495,15 +539,15 @@ function getSB() {
 }
 
 const METHOD_PREFIX = {
-  'DTF':         't',
-  'DTG':         'd',
-  'Embroidery':  'e',
-  'Screenprint': '',
-  'Heat Transfer': '',
-  'Vinyl':       '',
-  'Sublimation': '',
-  'Patch':       '',
-  'Other':       '',
+  'dtf':          't',
+  'dtg':          'd',
+  'embroidery':   'e',
+  'screenprint':  '',
+  'heat transfer':'',
+  'vinyl':        '',
+  'sublimation':  '',
+  'patch':        '',
+  'other':        '',
 };
 
 // Returns the primary decoration method from the first placement entry
@@ -514,7 +558,7 @@ function getPrimaryMethod() {
 
 // Build art number string from counter number + form fields
 function buildArtNumber(num, method, customer, artwork) {
-  const prefix = METHOD_PREFIX[method] ?? '';
+  const prefix = METHOD_PREFIX[method.toLowerCase()] ?? '';
   const store  = customer.replace(/\s+/g, '').replace(/[^a-zA-Z0-9_-]/g, '') || 'Store';
   const design = artwork.replace(/\s+/g, '').replace(/[^a-zA-Z0-9_-]/g, '')  || 'Design';
   return `${prefix}${num}Store_${store}_${design}`;
@@ -726,6 +770,156 @@ setInterval(checkDBStatus, 60000);
 // ── End DB Status + Previous Jobs ─────────────────────────────────────────────
 
 
+// Dropbox Integration
+const DBX_APP_KEY  = '1c4kmzj8a1k2g5k';
+const DBX_REDIRECT = 'https://mirrorimage-ri.github.io/MI-ProofTool/';
+const DBX_BASE = '/Web Store Art Proofs';
+const METHOD_SUBFOLDER = {
+  'dtf':         'DTF',
+  'dtg':         'DTG',
+  'embroidery':  'Embroidery',
+  'screenprint': 'Screen Print',
+};
+function getDbxFolder(artNum) {
+  const method = getPrimaryMethod().toLowerCase();
+  const sub = METHOD_SUBFOLDER[method] || 'Screen Print';
+  return DBX_BASE + '/' + sub + '/' + artNum;
+}
+let dbxToken   = localStorage.getItem('dbx_token') || null;
+let artFileObj = null;
+
+(function handleOAuthReturn() {
+  const hash = window.location.hash;
+  if (hash.includes('access_token=')) {
+    const params = new URLSearchParams(hash.replace('#','?'));
+    const token = params.get('access_token');
+    if (token) { dbxToken = token; localStorage.setItem('dbx_token', token); history.replaceState(null,'',window.location.pathname); }
+  }
+  updateDbxUI();
+})();
+
+function dbxConnect() {
+  if (dbxToken) { dbxToken = null; localStorage.removeItem('dbx_token'); updateDbxUI(); return; }
+  const url = 'https://www.dropbox.com/oauth2/authorize?client_id=' + DBX_APP_KEY
+    + '&response_type=token&redirect_uri=' + encodeURIComponent(DBX_REDIRECT) + '&token_access_type=legacy';
+  window.location.href = url;
+}
+
+function updateDbxUI() {
+  const btn   = document.getElementById('dbxConnectBtn');
+  const label = document.getElementById('dbxUserLabel');
+  const upBtn = document.getElementById('dbxUploadBtn');
+  if (dbxToken) {
+    btn.textContent = 'Dropbox Connected (click to disconnect)';
+    btn.className = 'dbx-connect-btn connected';
+    fetch('https://api.dropboxapi.com/2/users/get_current_account', {
+      method:'POST', headers:{'Authorization':'Bearer '+dbxToken}
+    }).then(r=>r.json()).then(d=>{ label.textContent=d.email||''; label.style.display='block'; }).catch(()=>{});
+  } else {
+    btn.textContent = 'Connect Dropbox';
+    btn.className = 'dbx-connect-btn';
+    label.style.display = 'none';
+  }
+  upBtn.disabled = !(dbxToken && artFileObj);
+}
+
+const artZone = document.getElementById('artUploadZone');
+artZone.addEventListener('dragover', e=>{ e.preventDefault(); artZone.classList.add('dragover'); });
+artZone.addEventListener('dragleave', ()=>artZone.classList.remove('dragover'));
+artZone.addEventListener('drop', e=>{ e.preventDefault(); artZone.classList.remove('dragover'); if(e.dataTransfer.files[0]) setArtFile(e.dataTransfer.files[0]); });
+
+function handleArtFile(e) { if(e.target.files[0]) setArtFile(e.target.files[0]); }
+
+function setArtFile(file) {
+  artFileObj = file;
+  const chip = document.getElementById('artFileChip');
+  chip.style.display = 'block';
+  chip.innerHTML = '<span class="art-file-chip">Art: ' + file.name + ' <button class="rm" onclick="clearArtFile()">&times;</button></span>';
+  updateDbxUI();
+}
+
+function clearArtFile() {
+  artFileObj = null;
+  document.getElementById('artFileChip').style.display = 'none';
+  document.getElementById('artFileInput').value = '';
+  updateDbxUI();
+}
+
+async function dbxUploadFile(path, content) {
+  const resp = await fetch('https://content.dropboxapi.com/2/files/upload', {
+    method:'POST',
+    headers:{
+      'Authorization':'Bearer '+dbxToken,
+      'Content-Type':'application/octet-stream',
+      'Dropbox-API-Arg':JSON.stringify({path, mode:'overwrite', autorename:false, mute:false}),
+    },
+    body: content,
+  });
+  if (!resp.ok) throw new Error('Upload failed (' + resp.status + '): ' + await resp.text());
+  return resp.json();
+}
+
+async function dbxGetOrCreateLink(path) {
+  let resp = await fetch('https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings', {
+    method:'POST',
+    headers:{'Authorization':'Bearer '+dbxToken,'Content-Type':'application/json'},
+    body:JSON.stringify({path, settings:{requested_visibility:'public'}}),
+  });
+  if (resp.status === 409) {
+    resp = await fetch('https://api.dropboxapi.com/2/sharing/list_shared_links', {
+      method:'POST',
+      headers:{'Authorization':'Bearer '+dbxToken,'Content-Type':'application/json'},
+      body:JSON.stringify({path, direct_only:true}),
+    });
+    const d = await resp.json();
+    return (d.links && d.links[0]) ? d.links[0].url : '';
+  }
+  const d = await resp.json();
+  return d.url || '';
+}
+
+async function uploadToDropbox() {
+  if (!dbxToken)   { alert('Connect Dropbox first.'); return; }
+  if (!artFileObj) { alert('Select an art file first.'); return; }
+  const artNum = document.getElementById('artNumber').value;
+  if (!artNum) { alert('Generate a proof first to get the art number.'); return; }
+  const prog  = document.getElementById('dbxProgress');
+  const upBtn = document.getElementById('dbxUploadBtn');
+  prog.style.display = 'block';
+  prog.style.color   = '#6A994E';
+  upBtn.disabled     = true;
+  try {
+    const folder = getDbxFolder(artNum);
+    prog.textContent = '1/3 Uploading art file...';
+    await dbxUploadFile(folder + '/' + artFileObj.name, artFileObj);
+    prog.textContent = '2/3 Generating proof PDF...';
+    const proofBlob = await generateProofBlob();
+    await dbxUploadFile(folder + '/' + artNum + '_proof.pdf', proofBlob);
+    prog.textContent = '3/3 Creating shared link...';
+    const link = await dbxGetOrCreateLink(folder);
+    if (link) document.getElementById('dropboxLink').value = link;
+    prog.textContent = 'Done! Uploaded to ' + artNum;
+  } catch(err) {
+    prog.textContent  = 'Error: ' + err.message;
+    prog.style.color  = '#BC4749';
+  } finally {
+    upBtn.disabled = false;
+  }
+}
+
+function generateProofBlob() {
+  return new Promise((resolve, reject) => {
+    html2pdf().set({
+      margin:[8,8,8,8],
+      image:{type:'jpeg',quality:0.98},
+      html2canvas:{scale:3,useCORS:true,backgroundColor:'#ffffff',logging:false},
+      jsPDF:{unit:'mm',format:'letter',orientation:'portrait'},
+      pagebreak:{mode:'avoid-all'},
+    }).from(document.getElementById('proofOutput')).outputPdf('blob').then(resolve).catch(reject);
+  });
+}
+// End Dropbox
+
 addPlacement();
 
 function exportPDF() {
@@ -737,11 +931,11 @@ function exportPDF() {
   btn.disabled = true;
 
   const opt = {
-    margin:       [10, 10, 10, 10],
+    margin:       [8, 8, 8, 8],
     filename:     (document.getElementById('jobNumber').value || 'proof') + '_' +
                   (document.getElementById('customerName').value || 'customer').replace(/\s+/g,'') + '.pdf',
-    image:        { type: 'jpeg', quality: 0.95 },
-    html2canvas:  { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+    image:        { type: 'jpeg', quality: 0.98 },
+    html2canvas:  { scale: 3, useCORS: true, backgroundColor: '#ffffff', logging: false },
     jsPDF:        { unit: 'mm', format: 'letter', orientation: 'portrait' },
     pagebreak:    { mode: 'avoid-all' }
   };
