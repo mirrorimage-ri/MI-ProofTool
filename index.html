@@ -460,16 +460,20 @@ function clearForm() {
 // ── Supabase ──────────────────────────────────────────────────────────────
 const SUPABASE_URL = "https://upyohtshhvdmbubwuionh.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVweW9odHNodnZkbWJ1YnVpb25oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgyNTI1MDEsImV4cCI6MjA5MzgyODUwMX0.FXsywxj6FrhLqHAyQ1HEy53lCkNmCL8In1jFUnD1U-U";
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-  global: {
-    headers: {
-      'apikey': SUPABASE_KEY,
-      'Authorization': 'Bearer ' + SUPABASE_KEY,
+// Safe lazy init — won't crash the rest of the app if CDN fails
+let sb = null;
+function getSB() {
+  if (!sb) {
+    try {
+      sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+        auth: { persistSession: false }
+      });
+    } catch(e) {
+      console.warn('Supabase client init failed:', e);
     }
-  },
-  db: { schema: 'public' },
-  auth: { persistSession: false }
-});
+  }
+  return sb;
+}
 
 const METHOD_PREFIX = {
   'DTF':         't',
