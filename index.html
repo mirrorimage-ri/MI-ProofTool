@@ -164,7 +164,7 @@
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:16px">
-    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v7r11</span></span>
+    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v7r12</span></span>
     <div class="db-status" id="dbStatus">
       <div class="db-dot checking" id="dbDot"></div>
       <span id="dbLabel">Checking DB…</span>
@@ -793,21 +793,27 @@ function exportPDF() {
   const origText = btn.innerHTML;
   btn.innerHTML = 'Generating...';
   btn.disabled = true;
-
-  const opt = {
-    margin:       [8, 8, 8, 8],
-    filename:     (document.getElementById('jobNumber').value || 'proof') + '_' +
-                  (document.getElementById('customerName').value || 'customer').replace(/\s+/g,'') + '.pdf',
-    image:        { type: 'jpeg', quality: 0.98 },
-    html2canvas:  { scale: 3, useCORS: true, backgroundColor: '#ffffff', logging: false },
-    jsPDF:        { unit: 'mm', format: 'letter', orientation: 'portrait' },
-    pagebreak:    { mode: 'avoid-all' }
-  };
-
-  html2pdf().set(opt).from(el).save().then(() => {
-    btn.innerHTML = origText;
-    btn.disabled = false;
-  });
+  const savedStyle = el.getAttribute('style') || '';
+  el.style.cssText = 'width:800px !important; max-width:800px !important; aspect-ratio:unset !important; display:flex !important; flex-direction:column !important;';
+  const mx = document.getElementById('proofMockups');
+  const savedMx = mx ? mx.getAttribute('style') || '' : '';
+  if (mx) mx.style.cssText = 'display:flex !important; height:420px !important; overflow:hidden !important; background:#E8E8E6 !important; padding:16px !important; align-items:center !important; justify-content:center !important;';
+  setTimeout(() => {
+    const opt = {
+      margin: [8,8,8,8],
+      filename: (document.getElementById('jobNumber').value||'proof')+'_'+(document.getElementById('customerName').value||'customer').replace(/\s+/g,'')+'.pdf',
+      image: {type:'jpeg',quality:0.98},
+      html2canvas: {scale:2.5,useCORS:true,backgroundColor:'#ffffff',logging:false,windowWidth:816},
+      jsPDF: {unit:'mm',format:'letter',orientation:'portrait'},
+      pagebreak: {mode:'avoid-all'}
+    };
+    html2pdf().set(opt).from(el).save().then(() => {
+      el.setAttribute('style', savedStyle);
+      if (mx) mx.setAttribute('style', savedMx);
+      btn.innerHTML = origText;
+      btn.disabled = false;
+    });
+  }, 800);
 }
 
 
@@ -1116,26 +1122,41 @@ function loadJob(val) {
 
 function generateProofBlob() {
   return new Promise((resolve, reject) => {
-    html2pdf().set({
-      margin:[8,8,8,8],
-      image:{type:'jpeg',quality:0.98},
-      html2canvas:{scale:3,useCORS:true,backgroundColor:'#ffffff',logging:false},
-      jsPDF:{unit:'mm',format:'letter',orientation:'portrait'},
-      pagebreak:{mode:'avoid-all'},
-    }).from(document.getElementById('proofOutput')).outputPdf('blob').then(resolve).catch(reject);
+    const el = document.getElementById('proofOutput');
+    // Force fixed dimensions so html2canvas renders content correctly
+    const savedStyle = el.getAttribute('style') || '';
+    el.style.cssText = 'width:800px !important; max-width:800px !important; aspect-ratio:unset !important; display:flex !important; flex-direction:column !important;';
+    // Also fix the mockup area to a fixed height so images render
+    const mx = document.getElementById('proofMockups');
+    const savedMx = mx ? mx.getAttribute('style') || '' : '';
+    if (mx) mx.style.cssText = 'display:flex !important; height:420px !important; overflow:hidden !important; background:#E8E8E6 !important; padding:16px !important; align-items:center !important; justify-content:center !important;';
+    // Wait for layout to settle
+    setTimeout(() => {
+      html2pdf().set({
+        margin:[8,8,8,8],
+        image:{type:'jpeg',quality:0.98},
+        html2canvas:{scale:2.5,useCORS:true,backgroundColor:'#ffffff',logging:false,windowWidth:816},
+        jsPDF:{unit:'mm',format:'letter',orientation:'portrait'},
+        pagebreak:{mode:'avoid-all'},
+      }).from(el).outputPdf('blob').then(blob => {
+        // Restore styles
+        el.setAttribute('style', savedStyle);
+        if (mx) mx.setAttribute('style', savedMx);
+        resolve(blob);
+      }).catch(err => {
+        el.setAttribute('style', savedStyle);
+        if (mx) mx.setAttribute('style', savedMx);
+        reject(err);
+      });
+    }, 800);
   });
 }
 
-// Run DB check on load — wait for DOM to be ready
-function initDBCheck() {
+// Run DB check after page fully loaded
+window.addEventListener("load", function() {
   checkDBStatus();
   setInterval(checkDBStatus, 60000);
-}
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", initDBCheck);
-} else {
-  initDBCheck();
-}
+});
 // ── End DB Status + Previous Jobs ─────────────────────────────────────────────
 
 
