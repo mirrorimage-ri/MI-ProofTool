@@ -95,7 +95,7 @@
   .pl-hdr{font-size:12px;font-weight:600;color:#1a1a18;margin-bottom:8px;padding-right:20px}
 
   /* PROOF */
-  .proof-wrap{background:#FFFFFF;border:1px solid #EDEDEB;border-radius:var(--rl);overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08);width:100%;max-width:860px;margin:0 auto;display:flex;flex-direction:column}
+  .proof-wrap{background:#FFFFFF;border:1px solid #EDEDEB;border-radius:var(--rl);overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08);width:100%;max-width:860px;margin:0 auto;display:flex;flex-direction:column;aspect-ratio:8.5/11}
   .proof-hdr{background:#FFFFFF;border-bottom:1px solid #EDEDEB;padding:12px 16px;display:flex;align-items:center;gap:14px}
   .proof-logo{height:50px;width:50px;border-radius:50%;object-fit:cover}
   .proof-co-name{font-size:15px;font-weight:700;color:#000;letter-spacing:.02em;}
@@ -104,15 +104,15 @@
   .proof-meta{padding:7px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #EDEDEB;background:#F8F8F6;flex-shrink:0}
   .proof-meta-info{font-family:var(--mono);font-size:12px;color:#386641}
   .proof-pl-bar{padding:10px 16px;background:#F0F7EC;border-bottom:1px solid #D3D1C7;font-size:12px;color:#386641;font-weight:500;display:flex;gap:12px;flex-wrap:wrap}
-  .proof-mockups{display:flex;gap:16px;padding:20px;justify-content:center;flex-wrap:nowrap;align-items:center;background:#E8E8E6;border-radius:0;height:380px;overflow:hidden}
+  .proof-mockups{display:flex;gap:16px;padding:20px;justify-content:center;flex-wrap:nowrap;align-items:center;background:#E8E8E6;border-radius:0;flex:1;min-height:320px;overflow:hidden}
   .proof-mockup-item{display:flex;flex-direction:column;align-items:center;gap:8px}
   .proof-mockup-img-wrap{
-    display:inline-flex;align-items:center;justify-content:center;
+    display:flex;align-items:center;justify-content:center;
     background:#E8E8E6;
     border-radius:4px;overflow:hidden;
-    height:100%;flex-shrink:0;
+    width:100%;height:100%;
   }
-  .proof-mockup-img-wrap img{display:block;max-height:340px;max-width:340px;width:auto;height:auto;object-fit:contain;}
+  .proof-mockup-img-wrap img{display:block;width:100%;height:100%;object-fit:contain;}
   .proof-mockup-lbl{font-size:11px;color:#6A994E;font-family:var(--mono)}
   .proof-details{padding:10px 16px;border-top:1px solid #EDEDEB;display:grid;grid-template-columns:1fr 1fr;gap:6px;flex-shrink:0}
   .proof-di label{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#386641;font-weight:600}
@@ -129,6 +129,15 @@
   .art-file-chip .rm{background:none;border:none;color:#0061fe;cursor:pointer;font-size:14px;padding:0;line-height:1}
   .dbx-progress{font-size:12px;color:#6A994E;margin-top:6px;display:none}
   .dbx-status-row{display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap}
+  .upload-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:1000;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s}
+  .upload-overlay.visible{opacity:1;pointer-events:all}
+  .upload-modal{background:#fff;border-radius:var(--rl);box-shadow:0 8px 40px rgba(0,0,0,.25);padding:1.75rem;max-width:520px;width:90%;display:flex;flex-direction:column;gap:1rem}
+  .upload-modal h3{font-size:16px;font-weight:600;color:#1a1a18;margin:0}
+  .upload-modal .modal-section{background:#F8F8F6;border:1px solid #EDEDEB;border-radius:var(--r);padding:10px 14px;font-size:12px;color:#444441}
+  .upload-modal .modal-section strong{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#888780;margin-bottom:4px}
+  .upload-modal .modal-files{display:flex;flex-direction:column;gap:4px}
+  .upload-modal .modal-file{font-family:monospace;font-size:11px;color:#0061fe;padding:2px 0}
+  .upload-modal .modal-btns{display:flex;gap:8px;justify-content:flex-end;margin-top:4px}
   @media print{
     .app-header,.sidebar{display:none!important}
     .main{display:block}.preview-area{padding:0}
@@ -156,7 +165,7 @@
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:16px">
-    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v7r6</span></span>
+    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v7r8</span></span>
     <div class="db-status" id="dbStatus">
       <div class="db-dot checking" id="dbDot"></div>
       <span id="dbLabel">Checking DB…</span>
@@ -499,6 +508,7 @@ async function generateProof() {
       artField.dataset.claimed = 'true';
       artStatus.textContent = '✓ Saved';
       artStatus.style.color = '#6A994E';
+      document.querySelectorAll('.pl-entry').forEach(e => updatePlArtChip(e));
     } catch(err) {
       artStatus.textContent = '⚠ ' + err.message;
       artStatus.style.color = '#BC4749';
@@ -526,9 +536,9 @@ async function generateProof() {
   const mx=document.getElementById('proofMockups');
   if(uploads.length){
     const count = uploads.length;
-    const maxW = Math.round(320 / count);
-    const wrapStyle = 'max-width:'+maxW+'px;height:340px';
-    mx.innerHTML=uploads.map(f=>'<div class="proof-mockup-item" style="display:flex;flex-direction:column;align-items:center;gap:6px">'+(f.type==='application/pdf'?'<div class="proof-mockup-img-wrap" style="'+wrapStyle+'"><div style="padding:20px;font-size:12px;color:#888780">PDF: '+f.name+'</div></div>':'<div class="proof-mockup-img-wrap" style="'+wrapStyle+'"><img src="'+f.url+'" alt="'+f.name+'"></div>')+'<div class="proof-mockup-lbl">'+f.name.replace(/\.[^.]+$/,'')+'</div></div>').join('');tml>
+    // Each item gets equal share of width; images fill the full mockup area height
+    const itemFlex = '1 1 ' + Math.floor(90/count) + '%';
+    mx.innerHTML=uploads.map(f=>'<div class="proof-mockup-item" style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:'+itemFlex+';min-width:0;height:100%">'+(f.type==='application/pdf'?'<div class="proof-mockup-img-wrap" style="width:100%;flex:1;min-height:0"><div style="padding:20px;font-size:12px;color:#888780">PDF: '+f.name+'</div></div>':'<div class="proof-mockup-img-wrap" style="width:100%;flex:1;min-height:0"><img src="'+f.url+'" alt="'+f.name+'" style="width:100%;height:100%;object-fit:contain"></div>')+'<div class="proof-mockup-lbl">'+f.name.replace(/\.[^.]+$/,'')+'</div></div>').join('');tml>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -625,7 +635,7 @@ async function generateProof() {
   .pl-hdr{font-size:12px;font-weight:600;color:#1a1a18;margin-bottom:8px;padding-right:20px}
 
   /* PROOF */
-  .proof-wrap{background:#FFFFFF;border:1px solid #EDEDEB;border-radius:var(--rl);overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08);width:100%;max-width:860px;margin:0 auto;display:flex;flex-direction:column}
+  .proof-wrap{background:#FFFFFF;border:1px solid #EDEDEB;border-radius:var(--rl);overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08);width:100%;max-width:860px;margin:0 auto;display:flex;flex-direction:column;aspect-ratio:8.5/11}
   .proof-hdr{background:#FFFFFF;border-bottom:1px solid #EDEDEB;padding:12px 16px;display:flex;align-items:center;gap:14px}
   .proof-logo{height:50px;width:50px;border-radius:50%;object-fit:cover}
   .proof-co-name{font-size:15px;font-weight:700;color:#000;letter-spacing:.02em;}
@@ -634,15 +644,15 @@ async function generateProof() {
   .proof-meta{padding:7px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #EDEDEB;background:#F8F8F6;flex-shrink:0}
   .proof-meta-info{font-family:var(--mono);font-size:12px;color:#386641}
   .proof-pl-bar{padding:10px 16px;background:#F0F7EC;border-bottom:1px solid #D3D1C7;font-size:12px;color:#386641;font-weight:500;display:flex;gap:12px;flex-wrap:wrap}
-  .proof-mockups{display:flex;gap:16px;padding:20px;justify-content:center;flex-wrap:nowrap;align-items:center;background:#E8E8E6;border-radius:0;height:380px;overflow:hidden}
+  .proof-mockups{display:flex;gap:16px;padding:20px;justify-content:center;flex-wrap:nowrap;align-items:center;background:#E8E8E6;border-radius:0;flex:1;min-height:320px;overflow:hidden}
   .proof-mockup-item{display:flex;flex-direction:column;align-items:center;gap:8px}
   .proof-mockup-img-wrap{
-    display:inline-flex;align-items:center;justify-content:center;
+    display:flex;align-items:center;justify-content:center;
     background:#E8E8E6;
     border-radius:4px;overflow:hidden;
-    height:100%;flex-shrink:0;
+    width:100%;height:100%;
   }
-  .proof-mockup-img-wrap img{display:block;max-height:340px;max-width:340px;width:auto;height:auto;object-fit:contain;}
+  .proof-mockup-img-wrap img{display:block;width:100%;height:100%;object-fit:contain;}
   .proof-mockup-lbl{font-size:11px;color:#6A994E;font-family:var(--mono)}
   .proof-details{padding:10px 16px;border-top:1px solid #EDEDEB;display:grid;grid-template-columns:1fr 1fr;gap:6px;flex-shrink:0}
   .proof-di label{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#386641;font-weight:600}
@@ -659,6 +669,15 @@ async function generateProof() {
   .art-file-chip .rm{background:none;border:none;color:#0061fe;cursor:pointer;font-size:14px;padding:0;line-height:1}
   .dbx-progress{font-size:12px;color:#6A994E;margin-top:6px;display:none}
   .dbx-status-row{display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap}
+  .upload-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:1000;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s}
+  .upload-overlay.visible{opacity:1;pointer-events:all}
+  .upload-modal{background:#fff;border-radius:var(--rl);box-shadow:0 8px 40px rgba(0,0,0,.25);padding:1.75rem;max-width:520px;width:90%;display:flex;flex-direction:column;gap:1rem}
+  .upload-modal h3{font-size:16px;font-weight:600;color:#1a1a18;margin:0}
+  .upload-modal .modal-section{background:#F8F8F6;border:1px solid #EDEDEB;border-radius:var(--r);padding:10px 14px;font-size:12px;color:#444441}
+  .upload-modal .modal-section strong{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#888780;margin-bottom:4px}
+  .upload-modal .modal-files{display:flex;flex-direction:column;gap:4px}
+  .upload-modal .modal-file{font-family:monospace;font-size:11px;color:#0061fe;padding:2px 0}
+  .upload-modal .modal-btns{display:flex;gap:8px;justify-content:flex-end;margin-top:4px}
   @media print{
     .app-header,.sidebar{display:none!important}
     .main{display:block}.preview-area{padding:0}
@@ -686,7 +705,7 @@ async function generateProof() {
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:16px">
-    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v7r6</span></span>
+    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v7r8</span></span>
     <div class="db-status" id="dbStatus">
       <div class="db-dot checking" id="dbDot"></div>
       <span id="dbLabel">Checking DB…</span>
@@ -904,6 +923,7 @@ async function generateProof() {
       artField.dataset.claimed = 'true';
       artStatus.textContent = '✓ Saved';
       artStatus.style.color = '#6A994E';
+      document.querySelectorAll('.pl-entry').forEach(e => updatePlArtChip(e));
     } catch(err) {
       artStatus.textContent = '⚠ ' + err.message;
       artStatus.style.color = '#BC4749';
@@ -1355,7 +1375,7 @@ async function dbxGetOrCreateLink(path) {
 async function uploadToDropbox() {
   if (!dbxToken) { alert('Connect Dropbox first.'); return; }
 
-  // Check required fields
+  // Validate required fields
   const missing = [];
   if (!document.getElementById('customerName').value.trim()) missing.push('Customer Name');
   if (!document.getElementById('artworkName').value.trim())  missing.push('Artwork Name');
@@ -1365,26 +1385,64 @@ async function uploadToDropbox() {
   if (!plEntries.length) missing.push('At least one Print Placement');
   const missingArt = plEntries.filter(e => !e._artFile);
   if (plEntries.length && missingArt.length) {
-    missing.push('Art file for: ' + missingArt.map(e => e.querySelector('.pl-loc').options[e.querySelector('.pl-loc').selectedIndex].text).join(', '));
+    missing.push('Art file for: ' + missingArt.map(e =>
+      e.querySelector('.pl-loc').options[e.querySelector('.pl-loc').selectedIndex].text
+    ).join(', '));
   }
   if (missing.length) {
-    alert('Please complete the following before uploading:\n\n' + missing.map(m => '  • ' + m).join('\n'));
+    alert('Please complete the following before uploading:\n\n' + missing.map(m => '  \u2022 ' + m).join('\n'));
     return;
   }
-  const prog  = document.getElementById('dbxProgress');
-  const upBtn = document.getElementById('dbxUploadBtn');
+
+  // Make sure proof is generated before showing modal
+  if (document.getElementById('mainLayout').classList.contains('entry-mode')) {
+    await generateProof();
+    await new Promise(r => setTimeout(r, 800));
+  }
+
+  // Build file list for modal
+  const folder = getDbxFolder(artNum);
+  const artFiles = plEntries.filter(e => e._artFile);
+  const fileList = artFiles.map(entry => {
+    const locVal = entry.querySelector('.pl-loc').value;
+    const suffix = PLACEMENT_SUFFIX[locVal] || locVal.toUpperCase();
+    const ext    = entry._artFile.name.split('.').pop();
+    return artNum + '-' + suffix + '.' + ext;
+  });
+  fileList.push(artNum + '_proof.pdf');
+
+  document.getElementById('modalFolder').textContent = folder;
+  document.getElementById('modalFiles').innerHTML = fileList
+    .map(f => '<div class="modal-file">&#128196; ' + f + '</div>').join('');
+  document.getElementById('modalProgress').style.display = 'none';
+  document.getElementById('modalProgress').textContent = '';
+  document.getElementById('modalConfirmBtn').disabled = false;
+  document.getElementById('modalConfirmBtn').textContent = 'Confirm Upload';
+
+  document.getElementById('uploadOverlay').classList.add('visible');
+}
+
+function closeUploadModal() {
+  document.getElementById('uploadOverlay').classList.remove('visible');
+}
+
+async function confirmUpload() {
+  const artNum    = document.getElementById('artNumber').value.trim();
+  const prog      = document.getElementById('modalProgress');
+  const confirmBtn = document.getElementById('modalConfirmBtn');
   prog.style.display = 'block';
   prog.style.color   = '#6A994E';
-  upBtn.disabled     = true;
+  confirmBtn.disabled = true;
+  confirmBtn.textContent = 'Uploading...';
+
   try {
-    const folder = getDbxFolder(artNum);
+    const folder     = getDbxFolder(artNum);
+    const plEntries  = Array.from(document.querySelectorAll('.pl-entry'));
+    const artFiles   = plEntries.filter(e => e._artFile);
+    const total      = artFiles.length + 2;
+    let   step       = 1;
 
-    // Upload each placement's art file
-    const entries = Array.from(document.querySelectorAll('.pl-entry'));
-    const artFiles = entries.filter(e => e._artFile);
-    const total = artFiles.length + 2; // art files + pdf + link
-    let step = 1;
-
+    // Upload each placement art file
     for (const entry of artFiles) {
       const locVal = entry.querySelector('.pl-loc').value;
       const suffix = PLACEMENT_SUFFIX[locVal] || locVal.toUpperCase();
@@ -1396,66 +1454,43 @@ async function uploadToDropbox() {
       step++;
     }
 
+    // Generate fresh proof PDF and upload
     prog.textContent = step + '/' + total + ' Generating proof PDF...';
-    const proofBlob = await generateProofBlob();
-    await dbxUploadFile(folder + '/' + artNum + '_proof.pdf', proofBlob);
-    step++;
+    const proofEl = document.getElementById('proofOutput');
+    const origW   = proofEl.style.width;
+    const origMax = proofEl.style.maxWidth;
+    const origAR  = proofEl.style.aspectRatio;
+    proofEl.style.width       = '800px';
+    proofEl.style.maxWidth    = 'none';
+    proofEl.style.aspectRatio = 'unset';
 
+    // Wait a tick for layout to settle
+    await new Promise(r => setTimeout(r, 500));
+
+    const proofBlob = await generateProofBlob();
+    proofEl.style.width       = origW;
+    proofEl.style.maxWidth    = origMax;
+    proofEl.style.aspectRatio = origAR;
+
+    step++;
+    await dbxUploadFile(folder + '/' + artNum + '_proof.pdf', proofBlob);
+
+    // Create shared link
     prog.textContent = step + '/' + total + ' Creating shared link...';
     const link = await dbxGetOrCreateLink(folder);
     if (link) document.getElementById('dropboxLink').value = link;
-    prog.textContent = 'Done! Uploaded to ' + artNum;
+
+    prog.textContent = '\u2713 Done! Uploaded to ' + artNum;
+    prog.style.color = '#386641';
+    confirmBtn.textContent = '\u2713 Done';
+    setTimeout(closeUploadModal, 2000);
+
   } catch(err) {
     prog.textContent  = 'Error: ' + err.message;
     prog.style.color  = '#BC4749';
-  } finally {
-    upBtn.disabled = false;
+    confirmBtn.disabled = false;
+    confirmBtn.textContent = 'Retry';
   }
 }
 
-function generateProofBlob() {
-  return new Promise((resolve, reject) => {
-    html2pdf().set({
-      margin:[8,8,8,8],
-      image:{type:'jpeg',quality:0.98},
-      html2canvas:{scale:3,useCORS:true,backgroundColor:'#ffffff',logging:false},
-      jsPDF:{unit:'mm',format:'letter',orientation:'portrait'},
-      pagebreak:{mode:'avoid-all'},
-    }).from(document.getElementById('proofOutput')).outputPdf('blob').then(resolve).catch(reject);
-  });
-}
-// End Dropbox
-
-addPlacement();
-
-function exportPDF() {
-  const el = document.getElementById('proofOutput');
-  if (!el) return;
-  const btn = document.querySelector('.btn-orange');
-  const origText = btn.innerHTML;
-  btn.innerHTML = 'Generating...';
-  btn.disabled = true;
-
-  const proofEl = document.getElementById('proofOutput');
-  proofEl.style.width = '800px';
-  proofEl.style.maxWidth = 'none';
-  const opt = {
-    margin:       [8, 8, 8, 8],
-    filename:     (document.getElementById('jobNumber').value || 'proof') + '_' +
-                  (document.getElementById('customerName').value || 'customer').replace(/\s+/g,'') + '.pdf',
-    image:        { type: 'jpeg', quality: 0.98 },
-    html2canvas:  { scale: 3, useCORS: true, backgroundColor: '#ffffff', logging: false },
-    jsPDF:        { unit: 'mm', format: 'letter', orientation: 'portrait' },
-    pagebreak:    { mode: 'avoid-all' }
-  };
-
-  html2pdf().set(opt).from(proofEl).save().then(() => {
-    proofEl.style.width = '';
-    proofEl.style.maxWidth = '';
-    btn.innerHTML = origText;
-    btn.disabled = false;
-  });
-}
-</script>
-</body>
-</html>
+>
