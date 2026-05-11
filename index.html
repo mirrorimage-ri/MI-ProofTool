@@ -164,7 +164,7 @@
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:16px">
-    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v7r9</span></span>
+    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v7r10</span></span>
     <div class="db-status" id="dbStatus">
       <div class="db-dot checking" id="dbDot"></div>
       <span id="dbLabel">Checking DB…</span>
@@ -751,6 +751,33 @@ async function confirmUpload() {
 }
 
 
+
+addPlacement();
+
+function exportPDF() {
+  const el = document.getElementById('proofOutput');
+  if (!el) return;
+  const btn = document.querySelector('.btn-orange');
+  const origText = btn.innerHTML;
+  btn.innerHTML = 'Generating...';
+  btn.disabled = true;
+
+  const opt = {
+    margin:       [8, 8, 8, 8],
+    filename:     (document.getElementById('jobNumber').value || 'proof') + '_' +
+                  (document.getElementById('customerName').value || 'customer').replace(/\s+/g,'') + '.pdf',
+    image:        { type: 'jpeg', quality: 0.98 },
+    html2canvas:  { scale: 3, useCORS: true, backgroundColor: '#ffffff', logging: false },
+    jsPDF:        { unit: 'mm', format: 'letter', orientation: 'portrait' },
+    pagebreak:    { mode: 'avoid-all' }
+  };
+
+  html2pdf().set(opt).from(el).save().then(() => {
+    btn.innerHTML = origText;
+    btn.disabled = false;
+  });
+}
+
 </script>
 
 <div class="upload-overlay" id="uploadOverlay">
@@ -1021,32 +1048,6 @@ setInterval(checkDBStatus, 60000);
 
 
 
-addPlacement();
-
-function exportPDF() {
-  const el = document.getElementById('proofOutput');
-  if (!el) return;
-  const btn = document.querySelector('.btn-orange');
-  const origText = btn.innerHTML;
-  btn.innerHTML = 'Generating...';
-  btn.disabled = true;
-
-  const opt = {
-    margin:       [8, 8, 8, 8],
-    filename:     (document.getElementById('jobNumber').value || 'proof') + '_' +
-                  (document.getElementById('customerName').value || 'customer').replace(/\s+/g,'') + '.pdf',
-    image:        { type: 'jpeg', quality: 0.98 },
-    html2canvas:  { scale: 3, useCORS: true, backgroundColor: '#ffffff', logging: false },
-    jsPDF:        { unit: 'mm', format: 'letter', orientation: 'portrait' },
-    pagebreak:    { mode: 'avoid-all' }
-  };
-
-  html2pdf().set(opt).from(el).save().then(() => {
-    btn.innerHTML = origText;
-    btn.disabled = false;
-  });
-}
-</script>
 
 <div class="upload-overlay" id="uploadOverlay">
   <div class="upload-modal">
