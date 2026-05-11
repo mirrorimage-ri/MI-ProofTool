@@ -164,7 +164,7 @@
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:16px">
-    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v7r12</span></span>
+    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v7r13</span></span>
     <div class="db-status" id="dbStatus">
       <div class="db-dot checking" id="dbDot"></div>
       <span id="dbLabel">Checking DB…</span>
@@ -1122,33 +1122,52 @@ function loadJob(val) {
 
 function generateProofBlob() {
   return new Promise((resolve, reject) => {
-    const el = document.getElementById('proofOutput');
-    // Force fixed dimensions so html2canvas renders content correctly
-    const savedStyle = el.getAttribute('style') || '';
-    el.style.cssText = 'width:800px !important; max-width:800px !important; aspect-ratio:unset !important; display:flex !important; flex-direction:column !important;';
-    // Also fix the mockup area to a fixed height so images render
-    const mx = document.getElementById('proofMockups');
-    const savedMx = mx ? mx.getAttribute('style') || '' : '';
-    if (mx) mx.style.cssText = 'display:flex !important; height:420px !important; overflow:hidden !important; background:#E8E8E6 !important; padding:16px !important; align-items:center !important; justify-content:center !important;';
-    // Wait for layout to settle
+    // Clone the proof element into an isolated off-screen container
+    // so html2canvas sees a clean fixed-size render with no flex collapse
+    const source = document.getElementById('proofOutput');
+    const clone  = source.cloneNode(true);
+
+    // Apply fully explicit sizing to clone and all child images
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:816px;background:#fff;z-index:-1;';
+    clone.style.cssText    = 'width:816px;max-width:816px;display:block;aspect-ratio:unset;';
+
+    // Fix mockup area in clone
+    const mxClone = clone.querySelector('#proofMockups');
+    if (mxClone) {
+      mxClone.style.cssText = 'display:flex;height:420px;overflow:hidden;background:#E8E8E6;padding:16px;align-items:center;justify-content:center;gap:16px;';
+    }
+    // Fix all images in clone to have explicit dimensions
+    clone.querySelectorAll('img').forEach(img => {
+      img.style.cssText = 'max-height:380px;max-width:380px;width:auto;height:auto;object-fit:contain;display:block;';
+    });
+    // Fix img-wrap divs
+    clone.querySelectorAll('.proof-mockup-img-wrap').forEach(wrap => {
+      wrap.style.cssText = 'display:flex;align-items:center;justify-content:center;background:#E8E8E6;height:380px;max-width:380px;flex:1;';
+    });
+    // Fix items
+    clone.querySelectorAll('.proof-mockup-item').forEach(item => {
+      item.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:6px;flex:1;height:100%;';
+    });
+
+    wrapper.appendChild(clone);
+    document.body.appendChild(wrapper);
+
     setTimeout(() => {
       html2pdf().set({
         margin:[8,8,8,8],
         image:{type:'jpeg',quality:0.98},
-        html2canvas:{scale:2.5,useCORS:true,backgroundColor:'#ffffff',logging:false,windowWidth:816},
+        html2canvas:{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false,windowWidth:816},
         jsPDF:{unit:'mm',format:'letter',orientation:'portrait'},
         pagebreak:{mode:'avoid-all'},
-      }).from(el).outputPdf('blob').then(blob => {
-        // Restore styles
-        el.setAttribute('style', savedStyle);
-        if (mx) mx.setAttribute('style', savedMx);
+      }).from(clone).outputPdf('blob').then(blob => {
+        document.body.removeChild(wrapper);
         resolve(blob);
       }).catch(err => {
-        el.setAttribute('style', savedStyle);
-        if (mx) mx.setAttribute('style', savedMx);
+        document.body.removeChild(wrapper);
         reject(err);
       });
-    }, 800);
+    }, 1000);
   });
 }
 
