@@ -156,7 +156,7 @@
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:16px">
-    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v7r4</span></span>
+    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v7r6</span></span>
     <div class="db-status" id="dbStatus">
       <div class="db-dot checking" id="dbDot"></div>
       <span id="dbLabel">Checking DB…</span>
@@ -234,16 +234,7 @@
       <button class="dbx-connect-btn" id="dbxConnectBtn" onclick="dbxConnect()">Connect Dropbox</button>
       <span id="dbxUserLabel" style="font-size:11px;color:#6A994E;display:none"></span>
     </div>
-    <div style="margin-top:12px">
-      <label style="font-size:12px;font-weight:500;color:#1a1a18;display:block;margin-bottom:4px">Art File <span style="font-weight:400;color:#888780;font-size:11px">(drag to upload)</span></label>
-      <div class="art-upload-zone" id="artUploadZone">
-        <input type="file" id="artFileInput" onchange="handleArtFile(event)">
-        <div style="font-size:13px;color:#888780">Drop artwork file or <strong style="color:#0061fe">click to browse</strong></div>
-        <div style="font-size:11px;color:#888780;margin-top:3px">AI, SVG, PNG, PDF, PSD...</div>
-      </div>
-      <div id="artFileChip" style="display:none"></div>
-      <div class="dbx-progress" id="dbxProgress"></div>
-    </div>
+    <div class="dbx-progress" id="dbxProgress" style="margin-top:8px"></div>
     <div style="margin-top:10px">
       <button class="btn" onclick="uploadToDropbox()"
         style="width:100%;background:#0061fe;color:#fff;font-weight:600;border:none;justify-content:center"
@@ -299,32 +290,14 @@
     <div class="row full" style="margin-bottom:8px">
       <div class="field"><label>Location</label>
         <select class="pl-loc" onchange="onLocChange(this)">
-          <optgroup label="Front">
             <option value="left-chest">Left Chest</option>
             <option value="right-chest">Right Chest</option>
-            <option value="center-chest">Center Chest</option>
-            <option value="full-chest">Full Chest</option>
             <option value="full-front">Full Front</option>
-            <option value="pocket">Pocket Area</option>
-            <option value="neck">Neck / Collar (Front)</option>
-            <option value="left-sleeve">Left Sleeve (Front)</option>
-            <option value="right-sleeve">Right Sleeve (Front)</option>
-            <option value="left-hip">Left Hip</option>
-            <option value="right-hip">Right Hip</option>
-            <option value="hood">Hood</option>
-            <option value="cuff">Cuff</option>
-          </optgroup>
-          <optgroup label="Back">
-            <option value="upper-back">Upper Back</option>
             <option value="full-back">Full Back</option>
-            <option value="lower-back">Lower Back</option>
-            <option value="back-neck">Back Neck / Nape</option>
-            <option value="back-left-sleeve">Left Sleeve (Back)</option>
-            <option value="back-right-sleeve">Right Sleeve (Back)</option>
-          </optgroup>
-          <optgroup label="Other">
-            <option value="custom">Custom (see notes)</option>
-          </optgroup>
+            <option value="high-back">High Back</option>
+            <option value="left-sleeve">Left Sleeve</option>
+            <option value="right-sleeve">Right Sleeve</option>
+            <option value="neck-label">Neck Label</option>
         </select>
       </div>
     </div>
@@ -336,7 +309,7 @@
       <div class="field"><label>Distance from Collar / Top</label><input type="text" class="pl-collar" placeholder=""></div>
       <div class="field"><label>Distance from Center / Side</label><input type="text" class="pl-center" placeholder=""></div>
     </div>
-    <div class="row">
+    <div class="row" style="margin-bottom:8px">
       <div class="field"><label>Decoration Method</label>
         <select class="pl-method">
           <option>Screenprint</option><option>Embroidery</option><option>DTG</option>
@@ -346,8 +319,20 @@
       </div>
       <div class="field"><label>Colors / Thread Colors</label><input type="text" class="pl-colors" placeholder=""></div>
     </div>
-    <div class="row full" style="margin-bottom:0">
-      <div class="field"><label>Placement Description / Additional Notes</label><textarea class="pl-desc" rows="2" placeholder=""></textarea></div>
+    <div class="row full" style="margin-bottom:8px">
+      <div class="field"><label>Placement Description / Additional Notes</label>
+        <textarea class="pl-desc" rows="2" placeholder=""></textarea>
+      </div>
+    </div>
+    <div class="pl-art-section" style="border-top:1px solid #EDEDEB;padding-top:10px;margin-top:4px">
+      <label style="font-size:12px;font-weight:500;color:#1a1a18;display:block;margin-bottom:4px">
+        Art File <span class="pl-art-suffix-label" style="font-family:monospace;color:#6A994E;font-size:11px"></span>
+      </label>
+      <div class="pl-art-drop" style="border:2px dashed #D3D1C7;border-radius:8px;padding:10px;text-align:center;cursor:pointer;background:#F8F8F6;position:relative;transition:all .15s">
+        <input type="file" class="pl-art-input" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%">
+        <span style="font-size:12px;color:#888780">Drop art file or <strong style="color:#0061fe">browse</strong></span>
+      </div>
+      <div class="pl-art-chip" style="display:none;margin-top:6px"></div>
     </div>
   </div>
 </template>
@@ -395,16 +380,77 @@ function addPlacement() {
   plCount++;
   const clone = document.getElementById('plTpl').content.cloneNode(true);
   const entry = clone.querySelector('.pl-entry');
-  entry.dataset.pid = 'p'+plCount;
+  const pid = 'p'+plCount;
+  entry.dataset.pid = pid;
   entry.querySelector('.pl-hdr').textContent = 'Placement #'+plCount+' — Left Chest';
+  // Set initial suffix label
+  const firstSuffix = PLACEMENT_SUFFIX['left-chest'] || 'LC';
+  const sl = entry.querySelector('.pl-art-suffix-label');
+  if (sl) sl.textContent = '— filename will end with -' + firstSuffix;
   document.getElementById('plEntries').appendChild(clone);
+  // Wire up drag/drop on the newly added entry
+  const added = document.getElementById('plEntries').lastElementChild;
+  wirePlArtDrop(added);
+}
+
+function wirePlArtDrop(entry) {
+  const drop = entry.querySelector('.pl-art-drop');
+  const input = entry.querySelector('.pl-art-input');
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.style.borderColor='#0061fe'; drop.style.background='#f0f4ff'; });
+  drop.addEventListener('dragleave', () => { drop.style.borderColor='#D3D1C7'; drop.style.background='#F8F8F6'; });
+  drop.addEventListener('drop', e => {
+    e.preventDefault(); drop.style.borderColor='#D3D1C7'; drop.style.background='#F8F8F6';
+    if (e.dataTransfer.files[0]) setPlArtFile(entry, e.dataTransfer.files[0]);
+  });
+  input.addEventListener('change', e => { if (e.target.files[0]) setPlArtFile(entry, e.target.files[0]); });
+}
+
+function setPlArtFile(entry, file) {
+  entry._artFile = file;
+  updatePlArtChip(entry);
+  updateDbxUI();
+}
+
+function updatePlArtChip(entry) {
+  const chip = entry.querySelector('.pl-art-chip');
+  if (!chip) return;
+  if (entry._artFile) {
+    const artNum  = document.getElementById('artNumber').value || 'ARTNUM';
+    const locVal  = entry.querySelector('.pl-loc').value;
+    const suffix  = PLACEMENT_SUFFIX[locVal] || locVal.toUpperCase();
+    const ext     = entry._artFile.name.split('.').pop();
+    const proposed = artNum + '-' + suffix + '.' + ext;
+    chip.style.display = 'block';
+    chip.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:#e8f0fe;border:1px solid #0061fe;border-radius:20px;font-size:11px;color:#0061fe;font-family:monospace">'
+      + proposed
+      + ' <button style="background:none;border:none;color:#0061fe;cursor:pointer;font-size:13px;padding:0;line-height:1" onclick="clearPlArtFile(this)">&times;</button></span>';
+  } else {
+    chip.style.display = 'none';
+    chip.innerHTML = '';
+  }
+}
+
+function clearPlArtFile(btn) {
+  const entry = btn.closest('.pl-entry');
+  entry._artFile = null;
+  entry.querySelector('.pl-art-input').value = '';
+  updatePlArtChip(entry);
+  updateDbxUI();
 }
 
 function removePl(btn) { btn.closest('.pl-entry').remove(); }
 
 function onLocChange(sel) {
   const e=sel.closest('.pl-entry'), n=e.dataset.pid.replace('p','');
-  e.querySelector('.pl-hdr').textContent='Placement #'+n+' — '+sel.options[sel.selectedIndex].text;
+  const locLabel = sel.options[sel.selectedIndex].text;
+  const locVal   = sel.value;
+  e.querySelector('.pl-hdr').textContent='Placement #'+n+' — '+locLabel;
+  const suffix = PLACEMENT_SUFFIX[locVal] || locVal.toUpperCase();
+  const artSuffixLabel = e.querySelector('.pl-art-suffix-label');
+  if (artSuffixLabel) {
+    artSuffixLabel.textContent = '— filename will end with -' + suffix;
+  }
+  updatePlArtChip(e);
 }
 
 function gatherPl() {
@@ -640,7 +686,7 @@ async function generateProof() {
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:16px">
-    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v7r4</span></span>
+    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v7r6</span></span>
     <div class="db-status" id="dbStatus">
       <div class="db-dot checking" id="dbDot"></div>
       <span id="dbLabel">Checking DB…</span>
@@ -659,87 +705,6 @@ async function generateProof() {
 </header>
 
 <div class="main entry-mode" id="mainLayout">
-<aside class="sidebar">
-  <div class="sidebar-cols">
-    <div class="sidebar-left">
-
-  <div class="card">
-    <div class="sec-title">Customer &amp; Order Info</div>
-    <div class="row">
-      <div class="field"><label>Customer Name *</label><input type="text" id="customerName" placeholder=""></div>
-      <div class="field"><label>Artwork Name *</label><input type="text" id="artworkName" placeholder=""></div>
-    </div>
-    <div class="row">
-      <div class="field"><label>Order / Job #</label><input type="text" id="jobNumber" placeholder=""></div>
-      <div class="field"><label>Date</label><input type="date" id="proofDate"></div>
-    </div>
-    <div class="row full">
-      <div class="field"><label>Garment Style / Description</label><input type="text" id="garmentStyle" placeholder=""></div>
-    </div>
-    <div class="row full" style="margin-bottom:0">
-      <div class="field" style="display:flex;align-items:flex-end;gap:8px">
-        <div style="flex:1">
-          <label>Art Number <span id="artNumStatus" style="font-weight:400;font-size:11px;color:#6A994E"></span></label>
-          <input type="text" id="artNumber" style="background:#fff;font-family:var(--mono);font-weight:600;color:#386641;letter-spacing:.02em" placeholder="Auto-generated on Generate Proof">
-        </div>
-        <button type="button" class="btn btn-secondary" onclick="previewArtNumber()" style="flex-shrink:0;white-space:nowrap;margin-bottom:0">Preview</button>
-      </div>
-    </div>
-    <div class="row full dbx">
-      <div class="field"><label>Dropbox File Link</label><input type="url" id="dropboxLink" placeholder=""></div>
-    </div>
-    <div class="row full">
-      <div class="field"><label>Notes / Special Instructions</label><textarea id="notes" placeholder=""></textarea></div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="sec-title">Print Placements</div>
-    <div id="plEntries"></div>
-    <button class="add-pl-btn" onclick="addPlacement()">+ Add Placement</button>
-  </div>
-    </div>
-    <div class="sidebar-right">
-
-  <div class="card">
-    <div class="sec-title">Mockup Images</div>
-    <div class="upload-zone" id="uploadZone">
-      <input type="file" id="mockupInput" multiple accept="image/*,application/pdf" onchange="handleUpload(event)">
-      <div style="font-size:22px;margin-bottom:5px">&#128247;</div>
-      <div style="font-size:13px;color:#4aaac8"><strong style="color:#386641">Click to upload</strong> or drag &amp; drop</div>
-      <div style="font-size:11px;color:#6A994E;margin-top:4px">PNG, JPG, PDF &middot; Multiple files for color variants</div>
-    </div>
-    <div class="thumbs" id="thumbs"></div>
-  </div>
-
-  <div class="card">
-    <div class="sec-title">Dropbox</div>
-    <div class="dbx-status-row">
-      <button class="dbx-connect-btn" id="dbxConnectBtn" onclick="dbxConnect()">Connect Dropbox</button>
-      <span id="dbxUserLabel" style="font-size:11px;color:#6A994E;display:none"></span>
-    </div>
-    <div style="margin-top:12px">
-      <label style="font-size:12px;font-weight:500;color:#1a1a18;display:block;margin-bottom:4px">Art File <span style="font-weight:400;color:#888780;font-size:11px">(drag to upload)</span></label>
-      <div class="art-upload-zone" id="artUploadZone">
-        <input type="file" id="artFileInput" onchange="handleArtFile(event)">
-        <div style="font-size:13px;color:#888780">Drop artwork file or <strong style="color:#0061fe">click to browse</strong></div>
-        <div style="font-size:11px;color:#888780;margin-top:3px">AI, SVG, PNG, PDF, PSD...</div>
-      </div>
-      <div id="artFileChip" style="display:none"></div>
-      <div class="dbx-progress" id="dbxProgress"></div>
-    </div>
-    <div style="margin-top:10px">
-      <button class="btn" onclick="uploadToDropbox()"
-        style="width:100%;background:#0061fe;color:#fff;font-weight:600;border:none;justify-content:center"
-        id="dbxUploadBtn" disabled>
-        &#8679; Upload Art + Proof to Dropbox
-      </button>
-    </div>
-  </div>
-    </div>
-  </div>
-  <div id="proofHint" style="text-align:center;padding:0.5rem 0 0.25rem;font-size:12px;color:#6A994E;">Fill in details above, then click <strong style="color:#386641">Generate Proof</strong> to preview.</div>
-</aside>
 
 <main class="preview-area">
 
@@ -776,65 +741,6 @@ async function generateProof() {
 </main>
 </div>
 
-<template id="plTpl">
-  <div class="pl-entry" data-pid="">
-    <div class="pl-hdr"></div>
-    <button class="rm-btn" onclick="removePl(this)">&times;</button>
-    <div class="row full" style="margin-bottom:8px">
-      <div class="field"><label>Location</label>
-        <select class="pl-loc" onchange="onLocChange(this)">
-          <optgroup label="Front">
-            <option value="left-chest">Left Chest</option>
-            <option value="right-chest">Right Chest</option>
-            <option value="center-chest">Center Chest</option>
-            <option value="full-chest">Full Chest</option>
-            <option value="full-front">Full Front</option>
-            <option value="pocket">Pocket Area</option>
-            <option value="neck">Neck / Collar (Front)</option>
-            <option value="left-sleeve">Left Sleeve (Front)</option>
-            <option value="right-sleeve">Right Sleeve (Front)</option>
-            <option value="left-hip">Left Hip</option>
-            <option value="right-hip">Right Hip</option>
-            <option value="hood">Hood</option>
-            <option value="cuff">Cuff</option>
-          </optgroup>
-          <optgroup label="Back">
-            <option value="upper-back">Upper Back</option>
-            <option value="full-back">Full Back</option>
-            <option value="lower-back">Lower Back</option>
-            <option value="back-neck">Back Neck / Nape</option>
-            <option value="back-left-sleeve">Left Sleeve (Back)</option>
-            <option value="back-right-sleeve">Right Sleeve (Back)</option>
-          </optgroup>
-          <optgroup label="Other">
-            <option value="custom">Custom (see notes)</option>
-          </optgroup>
-        </select>
-      </div>
-    </div>
-    <div class="row" style="margin-bottom:8px">
-      <div class="field"><label>Print Width</label><input type="text" class="pl-w" placeholder=""></div>
-      <div class="field"><label>Print Height</label><input type="text" class="pl-h" placeholder=""></div>
-    </div>
-    <div class="row" style="margin-bottom:8px">
-      <div class="field"><label>Distance from Collar / Top</label><input type="text" class="pl-collar" placeholder=""></div>
-      <div class="field"><label>Distance from Center / Side</label><input type="text" class="pl-center" placeholder=""></div>
-    </div>
-    <div class="row">
-      <div class="field"><label>Decoration Method</label>
-        <select class="pl-method">
-          <option>Screenprint</option><option>Embroidery</option><option>DTG</option>
-          <option>DTF</option><option>Heat Transfer</option><option>Vinyl</option>
-          <option>Sublimation</option><option>Patch</option><option>Other</option>
-        </select>
-      </div>
-      <div class="field"><label>Colors / Thread Colors</label><input type="text" class="pl-colors" placeholder=""></div>
-    </div>
-    <div class="row full" style="margin-bottom:0">
-      <div class="field"><label>Placement Description / Additional Notes</label><textarea class="pl-desc" rows="2" placeholder=""></textarea></div>
-    </div>
-  </div>
-</template>
 
 <script>
 let uploads = [];
@@ -879,16 +785,77 @@ function addPlacement() {
   plCount++;
   const clone = document.getElementById('plTpl').content.cloneNode(true);
   const entry = clone.querySelector('.pl-entry');
-  entry.dataset.pid = 'p'+plCount;
+  const pid = 'p'+plCount;
+  entry.dataset.pid = pid;
   entry.querySelector('.pl-hdr').textContent = 'Placement #'+plCount+' — Left Chest';
+  // Set initial suffix label
+  const firstSuffix = PLACEMENT_SUFFIX['left-chest'] || 'LC';
+  const sl = entry.querySelector('.pl-art-suffix-label');
+  if (sl) sl.textContent = '— filename will end with -' + firstSuffix;
   document.getElementById('plEntries').appendChild(clone);
+  // Wire up drag/drop on the newly added entry
+  const added = document.getElementById('plEntries').lastElementChild;
+  wirePlArtDrop(added);
+}
+
+function wirePlArtDrop(entry) {
+  const drop = entry.querySelector('.pl-art-drop');
+  const input = entry.querySelector('.pl-art-input');
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.style.borderColor='#0061fe'; drop.style.background='#f0f4ff'; });
+  drop.addEventListener('dragleave', () => { drop.style.borderColor='#D3D1C7'; drop.style.background='#F8F8F6'; });
+  drop.addEventListener('drop', e => {
+    e.preventDefault(); drop.style.borderColor='#D3D1C7'; drop.style.background='#F8F8F6';
+    if (e.dataTransfer.files[0]) setPlArtFile(entry, e.dataTransfer.files[0]);
+  });
+  input.addEventListener('change', e => { if (e.target.files[0]) setPlArtFile(entry, e.target.files[0]); });
+}
+
+function setPlArtFile(entry, file) {
+  entry._artFile = file;
+  updatePlArtChip(entry);
+  updateDbxUI();
+}
+
+function updatePlArtChip(entry) {
+  const chip = entry.querySelector('.pl-art-chip');
+  if (!chip) return;
+  if (entry._artFile) {
+    const artNum  = document.getElementById('artNumber').value || 'ARTNUM';
+    const locVal  = entry.querySelector('.pl-loc').value;
+    const suffix  = PLACEMENT_SUFFIX[locVal] || locVal.toUpperCase();
+    const ext     = entry._artFile.name.split('.').pop();
+    const proposed = artNum + '-' + suffix + '.' + ext;
+    chip.style.display = 'block';
+    chip.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:#e8f0fe;border:1px solid #0061fe;border-radius:20px;font-size:11px;color:#0061fe;font-family:monospace">'
+      + proposed
+      + ' <button style="background:none;border:none;color:#0061fe;cursor:pointer;font-size:13px;padding:0;line-height:1" onclick="clearPlArtFile(this)">&times;</button></span>';
+  } else {
+    chip.style.display = 'none';
+    chip.innerHTML = '';
+  }
+}
+
+function clearPlArtFile(btn) {
+  const entry = btn.closest('.pl-entry');
+  entry._artFile = null;
+  entry.querySelector('.pl-art-input').value = '';
+  updatePlArtChip(entry);
+  updateDbxUI();
 }
 
 function removePl(btn) { btn.closest('.pl-entry').remove(); }
 
 function onLocChange(sel) {
   const e=sel.closest('.pl-entry'), n=e.dataset.pid.replace('p','');
-  e.querySelector('.pl-hdr').textContent='Placement #'+n+' — '+sel.options[sel.selectedIndex].text;
+  const locLabel = sel.options[sel.selectedIndex].text;
+  const locVal   = sel.value;
+  e.querySelector('.pl-hdr').textContent='Placement #'+n+' — '+locLabel;
+  const suffix = PLACEMENT_SUFFIX[locVal] || locVal.toUpperCase();
+  const artSuffixLabel = e.querySelector('.pl-art-suffix-label');
+  if (artSuffixLabel) {
+    artSuffixLabel.textContent = '— filename will end with -' + suffix;
+  }
+  updatePlArtChip(e);
 }
 
 function gatherPl() {
@@ -1269,6 +1236,17 @@ setInterval(checkDBStatus, 60000);
 const DBX_APP_KEY  = '1c4kmzj8a1k2g5k';
 const DBX_REDIRECT = 'https://mirrorimage-ri.github.io/MI-ProofTool/';
 const DBX_BASE = '/Web Store Art Proofs';
+const PLACEMENT_SUFFIX = {
+  'left-chest': 'LC',
+  'right-chest': 'RC',
+  'full-front': 'FF',
+  'full-back': 'BCK',
+  'high-back': 'H-BCK',
+  'left-sleeve': 'L-SLV',
+  'right-sleeve': 'R-SLV',
+  'neck-label': 'NCK'
+};
+
 const METHOD_SUBFOLDER = {
   'dtf':         'DTF',
   'dtg':         'DTG',
@@ -1315,7 +1293,8 @@ function updateDbxUI() {
     btn.className = 'dbx-connect-btn';
     label.style.display = 'none';
   }
-  upBtn.disabled = !(dbxToken && artFileObj);
+  const hasAnyArt = Array.from(document.querySelectorAll('.pl-entry')).some(e => e._artFile);
+  upBtn.disabled = !(dbxToken && hasAnyArt);
 }
 
 const artZone = document.getElementById('artUploadZone');
@@ -1374,10 +1353,24 @@ async function dbxGetOrCreateLink(path) {
 }
 
 async function uploadToDropbox() {
-  if (!dbxToken)   { alert('Connect Dropbox first.'); return; }
-  if (!artFileObj) { alert('Select an art file first.'); return; }
-  const artNum = document.getElementById('artNumber').value;
-  if (!artNum) { alert('Generate a proof first to get the art number.'); return; }
+  if (!dbxToken) { alert('Connect Dropbox first.'); return; }
+
+  // Check required fields
+  const missing = [];
+  if (!document.getElementById('customerName').value.trim()) missing.push('Customer Name');
+  if (!document.getElementById('artworkName').value.trim())  missing.push('Artwork Name');
+  const artNum = document.getElementById('artNumber').value.trim();
+  if (!artNum) missing.push('Art Number (click Generate Proof first)');
+  const plEntries = Array.from(document.querySelectorAll('.pl-entry'));
+  if (!plEntries.length) missing.push('At least one Print Placement');
+  const missingArt = plEntries.filter(e => !e._artFile);
+  if (plEntries.length && missingArt.length) {
+    missing.push('Art file for: ' + missingArt.map(e => e.querySelector('.pl-loc').options[e.querySelector('.pl-loc').selectedIndex].text).join(', '));
+  }
+  if (missing.length) {
+    alert('Please complete the following before uploading:\n\n' + missing.map(m => '  • ' + m).join('\n'));
+    return;
+  }
   const prog  = document.getElementById('dbxProgress');
   const upBtn = document.getElementById('dbxUploadBtn');
   prog.style.display = 'block';
@@ -1385,12 +1378,30 @@ async function uploadToDropbox() {
   upBtn.disabled     = true;
   try {
     const folder = getDbxFolder(artNum);
-    prog.textContent = '1/3 Uploading art file...';
-    await dbxUploadFile(folder + '/' + artFileObj.name, artFileObj);
-    prog.textContent = '2/3 Generating proof PDF...';
+
+    // Upload each placement's art file
+    const entries = Array.from(document.querySelectorAll('.pl-entry'));
+    const artFiles = entries.filter(e => e._artFile);
+    const total = artFiles.length + 2; // art files + pdf + link
+    let step = 1;
+
+    for (const entry of artFiles) {
+      const locVal = entry.querySelector('.pl-loc').value;
+      const suffix = PLACEMENT_SUFFIX[locVal] || locVal.toUpperCase();
+      const file   = entry._artFile;
+      const ext    = file.name.split('.').pop();
+      const fname  = artNum + '-' + suffix + '.' + ext;
+      prog.textContent = step + '/' + total + ' Uploading ' + fname + '...';
+      await dbxUploadFile(folder + '/' + fname, file);
+      step++;
+    }
+
+    prog.textContent = step + '/' + total + ' Generating proof PDF...';
     const proofBlob = await generateProofBlob();
     await dbxUploadFile(folder + '/' + artNum + '_proof.pdf', proofBlob);
-    prog.textContent = '3/3 Creating shared link...';
+    step++;
+
+    prog.textContent = step + '/' + total + ' Creating shared link...';
     const link = await dbxGetOrCreateLink(folder);
     if (link) document.getElementById('dropboxLink').value = link;
     prog.textContent = 'Done! Uploaded to ' + artNum;
