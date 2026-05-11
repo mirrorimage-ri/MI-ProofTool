@@ -778,26 +778,30 @@ function exportPDF() {
   });
 }
 
-</script>
 
-<div class="upload-overlay" id="uploadOverlay">
-  <div class="upload-modal">
-    <h3>Confirm Dropbox Upload</h3>
-    <div class="upload-modal-section"><strong>Destination folder</strong>
-      <span id="modalFolder" style="font-family:monospace;font-size:12px;color:#386641"></span></div>
-    <div class="upload-modal-section"><strong>Files to upload</strong>
-      <div id="modalFiles"></div></div>
-    <p style="font-size:12px;color:#888780;margin:0">Proof PDF generated fresh before uploading.</p>
-    <div class="upload-modal-btns">
-      <button class="btn btn-secondary" onclick="closeUploadModal()">Cancel</button>
-      <button class="btn" id="modalConfirmBtn" onclick="confirmUpload()" style="background:#0061fe;color:#fff;font-weight:600;border:none">Confirm Upload</button>
-    </div>
-    <div id="modalProgress" style="font-size:12px;color:#6A994E;display:none;text-align:center;margin-top:4px"></div>
-  </div>
-</div>
-</body>
-</html
+function clearForm() {
+  if(!confirm('Clear all form data?')) return;
+  document.getElementById('mainLayout').classList.remove('split-mode');
+  document.getElementById('mainLayout').classList.add('entry-mode');
+  document.getElementById('proofHint').style.display='block';
 
+  ['customerName','artworkName','jobNumber','garmentStyle','dropboxLink','notes'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('proofDate').valueAsDate=new Date();
+  uploads=[]; renderThumbs();
+  document.getElementById('plEntries').innerHTML='';
+  plCount=0;
+  const af=document.getElementById('artNumber'); af.value=''; af.dataset.claimed='false'; af.style.color='#386641';
+  document.getElementById('artNumStatus').textContent='';
+  document.getElementById('proofMetaL').textContent='—';
+  document.getElementById('proofMetaR').textContent='—';
+  document.getElementById('proofHdrRight').innerHTML='';
+  document.getElementById('proofPlBar').style.display='none';
+  document.getElementById('proofMockups').innerHTML='<div style="color:var(--gray-400);font-size:13px;display:flex;align-items:center;gap:8px;padding:3rem 0">&#128247; Upload mockup images and click Generate Proof</div>';
+  document.getElementById('proofDetails').style.display='none';
+  document.getElementById('proofDetails').innerHTML='';
+}
+
+// ── Supabase ──────────────────────────────────────────────────────────────
 const SUPABASE_URL = "https://upyohtshvvdmbubuionh.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVweW9odHNodnZkbWJ1YnVpb25oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgyNTI1MDEsImV4cCI6MjA5MzgyODUwMX0.FXsywxj6FrhLqHAyQ1HEy53lCkNmCL8In1jFUnD1U-U";
 // Safe lazy init — won't crash the rest of the app if CDN fails
@@ -1049,6 +1053,9 @@ setInterval(checkDBStatus, 60000);
 
 
 
+
+</script>
+
 <div class="upload-overlay" id="uploadOverlay">
   <div class="upload-modal">
     <h3>Confirm Dropbox Upload</h3>
@@ -1064,5 +1071,6 @@ setInterval(checkDBStatus, 60000);
     <div id="modalProgress" style="font-size:12px;color:#6A994E;display:none;text-align:center;margin-top:4px"></div>
   </div>
 </div>
+
 </body>
 </html>
