@@ -538,6 +538,239 @@ async function generateProof() {
     // Each item gets equal share of width; images fill the full mockup area height
     const itemFlex = '1 1 ' + Math.floor(90/count) + '%';
     mx.innerHTML=uploads.map(f=>'<div class="proof-mockup-item" style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:'+itemFlex+';min-width:0;height:100%">'+(f.type==='application/pdf'?'<div class="proof-mockup-img-wrap" style="width:100%;flex:1;min-height:0"><div style="padding:20px;font-size:12px;color:#888780">PDF: '+f.name+'</div></div>':'<div class="proof-mockup-img-wrap" style="width:100%;flex:1;min-height:0"><img src="'+f.url+'" alt="'+f.name+'" style="width:100%;height:100%;object-fit:contain"></div>')+'<div class="proof-mockup-lbl">'+f.name.replace(/\.[^.]+$/,'')+'</div></div>').join('');
+  } else { mx.innerHTML='<div style="color:#6A994E;font-size:13px;padding:3rem 0">No mockup images uploaded.</div>'; }
+  const dt=document.getElementById('proofDetails');
+  const fields=[
+    ['Customer',customer],['Artwork Name',artwork],
+    artNum && ['Art Number', '<span style="font-family:monospace;font-weight:600;color:#386641">'+artNum+'</span>'],
+    job&&['Order / Job #',job],
+    garment&&['Garment',garment],
+    dropbox&&['Dropbox File','<a href="'+dropbox+'" target="_blank" style="color:#0061fe;font-size:11px;font-family:monospace;word-break:break-all">'+dropbox+'</a>'],
+    notes&&['Notes',notes],
+    ...pls.map((p,i)=>['Placement '+(i+1)+' — '+p.loc,
+      [p.w&&p.h?p.w+' W &times; '+p.h+' H':(p.w||p.h||''),
+       p.collar?p.collar+' from collar':'',
+       p.center?p.center+' from center':'',
+       p.method,p.colors,p.desc].filter(Boolean).join(' &middot; ')])
+  ].filter(Boolean);
+  if(fields.length){ dt.style.display='grid'; dt.innerHTML=fields.map(([l,v])=>'<div class="proof-di"><label style="color:#386641">'+l+'</label><p style="color:#386641">'+v+'</p></div>').join(''); }
+  else { dt.style.display='none'; }
+  document.getElementById('proofFootL').textContent='Mirror Image  \u00b7  '+customer+'  \u00b7  '+artwork;
+  document.getElementById('proofFootR').textContent='Generated '+new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+}
+// Dropbox Integration
+const DBX_APP_KEY  = '1c4kmzj8a1k2g5k';
+const DBX_REDIRECT = 'https://mirrorimage-ri.github.io/MI-ProofTool/';
+const DBX_BASE = '/Web Store Art Proofs';
+const PLACEMENT_SUFFIX = {
+  'left-chest': 'LC',
+  'right-chest': 'RC',
+  'full-front': 'FF',
+  'full-back': 'BCK',
+  'high-back': 'H-BCK',
+  'left-sleeve': 'L-SLV',
+  'right-sleeve': 'R-SLV',
+  'neck-label': 'NCK'
+};
+
+const METHOD_SUBFOLDER = {
+  'dtf':         'DTF',
+  'dtg':         'DTG',
+  'embroidery':  'Embroidery',
+  'screenprint': 'Screen Print',
+};
+function getDbxFolder(artNum) {
+  const method = getPrimaryMethod().toLowerCase();
+  const sub = METHOD_SUBFOLDER[method] || 'Screen Print';
+  return DBX_BASE + '/' + sub + '/' + artNum;
+}
+let dbxToken   = localStorage.getItem('dbx_token') || null;
+let artFileObj = null;
+
+(function handleOAuthReturn() {
+  const hash = window.location.hash;
+  if (hash.includes('access_token=')) {
+    const params = new URLSearchParams(hash.replace('#','?'));
+    const token = params.get('access_token');
+    if (token) { dbxToken = token; localStorage.setItem('dbx_token', token); history.replaceState(null,'',window.location.pathname); }
+  }
+  updateDbxUI();
+})();
+
+function dbxConnect() {
+  if (dbxToken) { dbxToken = null; localStorage.removeItem('dbx_token'); updateDbxUI(); return; }
+  const url = 'https://www.dropbox.com/oauth2/authorize?client_id=' + DBX_APP_KEY
+    + '&response_type=token&redirect_uri=' + encodeURIComponent(DBX_REDIRECT) + '&token_access_type=legacy';
+  window.location.href = url;
+}
+
+function updateDbxUI() {
+  const btn   = document.getElementById('dbxConnectBtn');
+  const label = document.getElementById('dbxUserLabel');
+  const upBtn = document.getElementById('dbxUploadBtn');
+  if (dbxToken) {
+    btn.textContent = 'Dropbox Connected (click to disconnect)';
+    btn.className = 'dbx-connect-btn connected';
+    fetch('https://api.dropboxapi.com/2/users/get_current_account', {
+      method:'POST', headers:{'Authorization':'Bearer '+dbxToken}
+    }).then(r=>r.json()).then(d=>{ label.textContent=d.email||''; label.style.display='block'; }).catch(()=>{});
+  } else {
+    btn.textContent = 'Connect Dropbox';
+    btn.className = 'dbx-connect-btn';
+    label.style.display = 'none';
+  }
+  const hasAnyArt = Array.from(document.querySelectorAll('.pl-entry')).some(e => e._artFile);
+  upBtn.disabled = !(dbxToken && hasAnyArt);
+}
+
+const artZone = document.getElementById('artUploadZone');
+artZone.addEventListener('dragover', e=>{ e.preventDefault(); artZone.classList.add('dragover'); });
+artZone.addEventListener('dragleave', ()=>artZone.classList.remove('dragover'));
+artZone.addEventListener('drop', e=>{ e.preventDefault(); artZone.classList.remove('dragover'); if(e.dataTransfer.files[0]) setArtFile(e.dataTransfer.files[0]); });
+
+function handleArtFile(e) { if(e.target.files[0]) setArtFile(e.target.files[0]); }
+
+function setArtFile(file) {
+  artFileObj = file;
+  const chip = document.getElementById('artFileChip');
+  chip.style.display = 'block';
+  chip.innerHTML = '<span class="art-file-chip">Art: ' + file.name + ' <button class="rm" onclick="clearArtFile()">&times;</button></span>';
+  updateDbxUI();
+}
+
+function clearArtFile() {
+  artFileObj = null;
+  document.getElementById('artFileChip').style.display = 'none';
+  document.getElementById('artFileInput').value = '';
+  updateDbxUI();
+}
+
+
+async function dbxUploadFile(path, content) {
+  const resp = await fetch('https://content.dropboxapi.com/2/files/upload', {
+    method:'POST',
+    headers:{
+      'Authorization':'Bearer '+dbxToken,
+      'Content-Type':'application/octet-stream',
+      'Dropbox-API-Arg':JSON.stringify({path, mode:'overwrite', autorename:false, mute:false}),
+    },
+    body: content,
+  });
+  if (!resp.ok) throw new Error('Upload failed (' + resp.status + '): ' + await resp.text());
+  return resp.json();
+}
+
+async function dbxGetOrCreateLink(path) {
+  let resp = await fetch('https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings', {
+    method:'POST',
+    headers:{'Authorization':'Bearer '+dbxToken,'Content-Type':'application/json'},
+    body:JSON.stringify({path, settings:{requested_visibility:'public'}}),
+  });
+  if (resp.status === 409) {
+    resp = await fetch('https://api.dropboxapi.com/2/sharing/list_shared_links', {
+      method:'POST',
+      headers:{'Authorization':'Bearer '+dbxToken,'Content-Type':'application/json'},
+      body:JSON.stringify({path, direct_only:true}),
+    });
+    const d = await resp.json();
+    return (d.links && d.links[0]) ? d.links[0].url : '';
+  }
+  const d = await resp.json();
+  return d.url || '';
+}
+
+async function uploadToDropbox() {
+  if (!dbxToken) { alert("Connect Dropbox first."); return; }
+  const missing = [];
+  if (!document.getElementById("customerName").value.trim()) missing.push("Customer Name");
+  if (!document.getElementById("artworkName").value.trim())  missing.push("Artwork Name");
+  const artNum = document.getElementById("artNumber").value.trim();
+  if (!artNum) missing.push("Art Number (click Generate Proof first)");
+  const plEntries = Array.from(document.querySelectorAll(".pl-entry"));
+  if (!plEntries.length) missing.push("At least one Print Placement");
+  const missingArt = plEntries.filter(e => !e._artFile);
+  if (plEntries.length && missingArt.length) {
+    missing.push("Art file for: " + missingArt.map(e =>
+      e.querySelector(".pl-loc").options[e.querySelector(".pl-loc").selectedIndex].text).join(", "));
+  }
+  if (missing.length) { alert("Please complete:\n\n" + missing.map(m => "  \u2022 " + m).join("\n")); return; }
+  if (document.getElementById("mainLayout").classList.contains("entry-mode")) {
+    await generateProof(); await new Promise(r => setTimeout(r, 800));
+  }
+  const folder = getDbxFolder(artNum);
+  const artFiles = plEntries.filter(e => e._artFile);
+  const fileList = artFiles.map(e => {
+    const sfx = PLACEMENT_SUFFIX[e.querySelector(".pl-loc").value] || e.querySelector(".pl-loc").value.toUpperCase();
+    return artNum + "-" + sfx + "." + e._artFile.name.split(".").pop();
+  });
+  fileList.push(artNum + "_proof.pdf");
+  document.getElementById("modalFolder").textContent = folder;
+  document.getElementById("modalFiles").innerHTML = fileList.map(f => "<span class=\"upload-modal-file\">&#128196; " + f + "</span>").join("");
+  document.getElementById("modalProgress").style.display = "none";
+  document.getElementById("modalConfirmBtn").disabled = false;
+  document.getElementById("modalConfirmBtn").textContent = "Confirm Upload";
+  document.getElementById("uploadOverlay").classList.add("visible");
+}
+
+function closeUploadModal() { document.getElementById("uploadOverlay").classList.remove("visible"); }
+
+async function confirmUpload() {
+  const artNum = document.getElementById("artNumber").value.trim();
+  const prog = document.getElementById("modalProgress");
+  const btn  = document.getElementById("modalConfirmBtn");
+  prog.style.display = "block"; prog.style.color = "#6A994E";
+  btn.disabled = true; btn.textContent = "Uploading...";
+  try {
+    const folder = getDbxFolder(artNum);
+    const entries = Array.from(document.querySelectorAll(".pl-entry")).filter(e => e._artFile);
+    const total = entries.length + 2; let step = 1;
+    for (const e of entries) {
+      const sfx = PLACEMENT_SUFFIX[e.querySelector(".pl-loc").value] || e.querySelector(".pl-loc").value.toUpperCase();
+      const fname = artNum + "-" + sfx + "." + e._artFile.name.split(".").pop();
+      prog.textContent = step + "/" + total + " Uploading " + fname + "...";
+      await dbxUploadFile(folder + "/" + fname, e._artFile); step++;
+    }
+    prog.textContent = step + "/" + total + " Generating proof...";
+    const el = document.getElementById("proofOutput");
+    const [ow,om,oa] = [el.style.width, el.style.maxWidth, el.style.aspectRatio];
+    el.style.width = "800px"; el.style.maxWidth = "none"; el.style.aspectRatio = "unset";
+    await new Promise(r => setTimeout(r, 600));
+    const blob = await generateProofBlob();
+    el.style.width = ow; el.style.maxWidth = om; el.style.aspectRatio = oa; step++;
+    await dbxUploadFile(folder + "/" + artNum + "_proof.pdf", blob);
+    prog.textContent = step + "/" + total + " Creating link...";
+    const link = await dbxGetOrCreateLink(folder);
+    if (link) document.getElementById("dropboxLink").value = link;
+    prog.textContent = "\u2713 Done!";
+    prog.style.color = "#386641"; btn.textContent = "\u2713 Done";
+    setTimeout(closeUploadModal, 2000);
+  } catch(err) {
+    prog.textContent = "Error: " + err.message; prog.style.color = "#BC4749";
+    btn.disabled = false; btn.textContent = "Retry";
+  }
+}
+
+
+</script>
+
+<div class="upload-overlay" id="uploadOverlay">
+  <div class="upload-modal">
+    <h3>Confirm Dropbox Upload</h3>
+    <div class="upload-modal-section"><strong>Destination folder</strong>
+      <span id="modalFolder" style="font-family:monospace;font-size:12px;color:#386641"></span></div>
+    <div class="upload-modal-section"><strong>Files to upload</strong>
+      <div id="modalFiles"></div></div>
+    <p style="font-size:12px;color:#888780;margin:0">Proof PDF generated fresh before uploading.</p>
+    <div class="upload-modal-btns">
+      <button class="btn btn-secondary" onclick="closeUploadModal()">Cancel</button>
+      <button class="btn" id="modalConfirmBtn" onclick="confirmUpload()" style="background:#0061fe;color:#fff;font-weight:600;border:none">Confirm Upload</button>
+    </div>
+    <div id="modalProgress" style="font-size:12px;color:#6A994E;display:none;text-align:center;margin-top:4px"></div>
+  </div>
+</div>
+</body>
+</html
+
 const SUPABASE_URL = "https://upyohtshvvdmbubuionh.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVweW9odHNodnZkbWJ1YnVpb25oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgyNTI1MDEsImV4cCI6MjA5MzgyODUwMX0.FXsywxj6FrhLqHAyQ1HEy53lCkNmCL8In1jFUnD1U-U";
 // Safe lazy init — won't crash the rest of the app if CDN fails
@@ -787,199 +1020,32 @@ setInterval(checkDBStatus, 60000);
 // ── End DB Status + Previous Jobs ─────────────────────────────────────────────
 
 
-// Dropbox Integration
-const DBX_APP_KEY  = '1c4kmzj8a1k2g5k';
-const DBX_REDIRECT = 'https://mirrorimage-ri.github.io/MI-ProofTool/';
-const DBX_BASE = '/Web Store Art Proofs';
-const PLACEMENT_SUFFIX = {
-  'left-chest': 'LC',
-  'right-chest': 'RC',
-  'full-front': 'FF',
-  'full-back': 'BCK',
-  'high-back': 'H-BCK',
-  'left-sleeve': 'L-SLV',
-  'right-sleeve': 'R-SLV',
-  'neck-label': 'NCK'
-};
 
-const METHOD_SUBFOLDER = {
-  'dtf':         'DTF',
-  'dtg':         'DTG',
-  'embroidery':  'Embroidery',
-  'screenprint': 'Screen Print',
-};
-function getDbxFolder(artNum) {
-  const method = getPrimaryMethod().toLowerCase();
-  const sub = METHOD_SUBFOLDER[method] || 'Screen Print';
-  return DBX_BASE + '/' + sub + '/' + artNum;
-}
-let dbxToken   = localStorage.getItem('dbx_token') || null;
-let artFileObj = null;
+addPlacement();
 
-(function handleOAuthReturn() {
-  const hash = window.location.hash;
-  if (hash.includes('access_token=')) {
-    const params = new URLSearchParams(hash.replace('#','?'));
-    const token = params.get('access_token');
-    if (token) { dbxToken = token; localStorage.setItem('dbx_token', token); history.replaceState(null,'',window.location.pathname); }
-  }
-  updateDbxUI();
-})();
+function exportPDF() {
+  const el = document.getElementById('proofOutput');
+  if (!el) return;
+  const btn = document.querySelector('.btn-orange');
+  const origText = btn.innerHTML;
+  btn.innerHTML = 'Generating...';
+  btn.disabled = true;
 
-function dbxConnect() {
-  if (dbxToken) { dbxToken = null; localStorage.removeItem('dbx_token'); updateDbxUI(); return; }
-  const url = 'https://www.dropbox.com/oauth2/authorize?client_id=' + DBX_APP_KEY
-    + '&response_type=token&redirect_uri=' + encodeURIComponent(DBX_REDIRECT) + '&token_access_type=legacy';
-  window.location.href = url;
-}
+  const opt = {
+    margin:       [8, 8, 8, 8],
+    filename:     (document.getElementById('jobNumber').value || 'proof') + '_' +
+                  (document.getElementById('customerName').value || 'customer').replace(/\s+/g,'') + '.pdf',
+    image:        { type: 'jpeg', quality: 0.98 },
+    html2canvas:  { scale: 3, useCORS: true, backgroundColor: '#ffffff', logging: false },
+    jsPDF:        { unit: 'mm', format: 'letter', orientation: 'portrait' },
+    pagebreak:    { mode: 'avoid-all' }
+  };
 
-function updateDbxUI() {
-  const btn   = document.getElementById('dbxConnectBtn');
-  const label = document.getElementById('dbxUserLabel');
-  const upBtn = document.getElementById('dbxUploadBtn');
-  if (dbxToken) {
-    btn.textContent = 'Dropbox Connected (click to disconnect)';
-    btn.className = 'dbx-connect-btn connected';
-    fetch('https://api.dropboxapi.com/2/users/get_current_account', {
-      method:'POST', headers:{'Authorization':'Bearer '+dbxToken}
-    }).then(r=>r.json()).then(d=>{ label.textContent=d.email||''; label.style.display='block'; }).catch(()=>{});
-  } else {
-    btn.textContent = 'Connect Dropbox';
-    btn.className = 'dbx-connect-btn';
-    label.style.display = 'none';
-  }
-  const hasAnyArt = Array.from(document.querySelectorAll('.pl-entry')).some(e => e._artFile);
-  upBtn.disabled = !(dbxToken && hasAnyArt);
-}
-
-const artZone = document.getElementById('artUploadZone');
-artZone.addEventListener('dragover', e=>{ e.preventDefault(); artZone.classList.add('dragover'); });
-artZone.addEventListener('dragleave', ()=>artZone.classList.remove('dragover'));
-artZone.addEventListener('drop', e=>{ e.preventDefault(); artZone.classList.remove('dragover'); if(e.dataTransfer.files[0]) setArtFile(e.dataTransfer.files[0]); });
-
-function handleArtFile(e) { if(e.target.files[0]) setArtFile(e.target.files[0]); }
-
-function setArtFile(file) {
-  artFileObj = file;
-  const chip = document.getElementById('artFileChip');
-  chip.style.display = 'block';
-  chip.innerHTML = '<span class="art-file-chip">Art: ' + file.name + ' <button class="rm" onclick="clearArtFile()">&times;</button></span>';
-  updateDbxUI();
-}
-
-function clearArtFile() {
-  artFileObj = null;
-  document.getElementById('artFileChip').style.display = 'none';
-  document.getElementById('artFileInput').value = '';
-  updateDbxUI();
-}
-
-
-async function dbxUploadFile(path, content) {
-  const resp = await fetch('https://content.dropboxapi.com/2/files/upload', {
-    method:'POST',
-    headers:{
-      'Authorization':'Bearer '+dbxToken,
-      'Content-Type':'application/octet-stream',
-      'Dropbox-API-Arg':JSON.stringify({path, mode:'overwrite', autorename:false, mute:false}),
-    },
-    body: content,
+  html2pdf().set(opt).from(el).save().then(() => {
+    btn.innerHTML = origText;
+    btn.disabled = false;
   });
-  if (!resp.ok) throw new Error('Upload failed (' + resp.status + '): ' + await resp.text());
-  return resp.json();
 }
-
-async function dbxGetOrCreateLink(path) {
-  let resp = await fetch('https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings', {
-    method:'POST',
-    headers:{'Authorization':'Bearer '+dbxToken,'Content-Type':'application/json'},
-    body:JSON.stringify({path, settings:{requested_visibility:'public'}}),
-  });
-  if (resp.status === 409) {
-    resp = await fetch('https://api.dropboxapi.com/2/sharing/list_shared_links', {
-      method:'POST',
-      headers:{'Authorization':'Bearer '+dbxToken,'Content-Type':'application/json'},
-      body:JSON.stringify({path, direct_only:true}),
-    });
-    const d = await resp.json();
-    return (d.links && d.links[0]) ? d.links[0].url : '';
-  }
-  const d = await resp.json();
-  return d.url || '';
-}
-
-async function uploadToDropbox() {
-  if (!dbxToken) { alert("Connect Dropbox first."); return; }
-  const missing = [];
-  if (!document.getElementById("customerName").value.trim()) missing.push("Customer Name");
-  if (!document.getElementById("artworkName").value.trim())  missing.push("Artwork Name");
-  const artNum = document.getElementById("artNumber").value.trim();
-  if (!artNum) missing.push("Art Number (click Generate Proof first)");
-  const plEntries = Array.from(document.querySelectorAll(".pl-entry"));
-  if (!plEntries.length) missing.push("At least one Print Placement");
-  const missingArt = plEntries.filter(e => !e._artFile);
-  if (plEntries.length && missingArt.length) {
-    missing.push("Art file for: " + missingArt.map(e =>
-      e.querySelector(".pl-loc").options[e.querySelector(".pl-loc").selectedIndex].text).join(", "));
-  }
-  if (missing.length) { alert("Please complete:\n\n" + missing.map(m => "  \u2022 " + m).join("\n")); return; }
-  if (document.getElementById("mainLayout").classList.contains("entry-mode")) {
-    await generateProof(); await new Promise(r => setTimeout(r, 800));
-  }
-  const folder = getDbxFolder(artNum);
-  const artFiles = plEntries.filter(e => e._artFile);
-  const fileList = artFiles.map(e => {
-    const sfx = PLACEMENT_SUFFIX[e.querySelector(".pl-loc").value] || e.querySelector(".pl-loc").value.toUpperCase();
-    return artNum + "-" + sfx + "." + e._artFile.name.split(".").pop();
-  });
-  fileList.push(artNum + "_proof.pdf");
-  document.getElementById("modalFolder").textContent = folder;
-  document.getElementById("modalFiles").innerHTML = fileList.map(f => "<span class=\"upload-modal-file\">&#128196; " + f + "</span>").join("");
-  document.getElementById("modalProgress").style.display = "none";
-  document.getElementById("modalConfirmBtn").disabled = false;
-  document.getElementById("modalConfirmBtn").textContent = "Confirm Upload";
-  document.getElementById("uploadOverlay").classList.add("visible");
-}
-
-function closeUploadModal() { document.getElementById("uploadOverlay").classList.remove("visible"); }
-
-async function confirmUpload() {
-  const artNum = document.getElementById("artNumber").value.trim();
-  const prog = document.getElementById("modalProgress");
-  const btn  = document.getElementById("modalConfirmBtn");
-  prog.style.display = "block"; prog.style.color = "#6A994E";
-  btn.disabled = true; btn.textContent = "Uploading...";
-  try {
-    const folder = getDbxFolder(artNum);
-    const entries = Array.from(document.querySelectorAll(".pl-entry")).filter(e => e._artFile);
-    const total = entries.length + 2; let step = 1;
-    for (const e of entries) {
-      const sfx = PLACEMENT_SUFFIX[e.querySelector(".pl-loc").value] || e.querySelector(".pl-loc").value.toUpperCase();
-      const fname = artNum + "-" + sfx + "." + e._artFile.name.split(".").pop();
-      prog.textContent = step + "/" + total + " Uploading " + fname + "...";
-      await dbxUploadFile(folder + "/" + fname, e._artFile); step++;
-    }
-    prog.textContent = step + "/" + total + " Generating proof...";
-    const el = document.getElementById("proofOutput");
-    const [ow,om,oa] = [el.style.width, el.style.maxWidth, el.style.aspectRatio];
-    el.style.width = "800px"; el.style.maxWidth = "none"; el.style.aspectRatio = "unset";
-    await new Promise(r => setTimeout(r, 600));
-    const blob = await generateProofBlob();
-    el.style.width = ow; el.style.maxWidth = om; el.style.aspectRatio = oa; step++;
-    await dbxUploadFile(folder + "/" + artNum + "_proof.pdf", blob);
-    prog.textContent = step + "/" + total + " Creating link...";
-    const link = await dbxGetOrCreateLink(folder);
-    if (link) document.getElementById("dropboxLink").value = link;
-    prog.textContent = "\u2713 Done!";
-    prog.style.color = "#386641"; btn.textContent = "\u2713 Done";
-    setTimeout(closeUploadModal, 2000);
-  } catch(err) {
-    prog.textContent = "Error: " + err.message; prog.style.color = "#BC4749";
-    btn.disabled = false; btn.textContent = "Retry";
-  }
-}
-
-
 </script>
 
 <div class="upload-overlay" id="uploadOverlay">
