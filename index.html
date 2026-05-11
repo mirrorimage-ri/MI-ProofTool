@@ -170,7 +170,7 @@
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:16px">
-    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v8</span></span>
+    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v8r1</span></span>
     <div class="db-status" id="dbStatus">
       <div class="db-dot checking" id="dbDot"></div>
       <span id="dbLabel">Checking DB…</span>
@@ -1167,57 +1167,136 @@ function loadJob(val) {
 }
 
 async function generateProofBlob() {
-  // Build a clean self-contained snapshot div with fixed pixel dimensions
-  const source = document.getElementById('proofOutput');
+  // Gather all data manually, build a self-contained printable HTML string,
+  // then render via html2pdf — bypasses cloning issues entirely
+  const customer = document.getElementById('customerName').value || '';
+  const artwork  = document.getElementById('artworkName').value  || '';
+  const artNum   = document.getElementById('artNumber').value    || '';
+  const job      = document.getElementById('jobNumber').value    || '';
+  const date     = document.getElementById('proofDate').value    || '';
+  const garment  = document.getElementById('garmentStyle').value || '';
+  const dropbox  = document.getElementById('dropboxLink').value  || '';
+  const notes    = document.getElementById('notes').value        || '';
 
-  // Create isolated container
+  const placements = gatherPl();
+
+  // Convert mockup files to data URLs
+  const mockupImgs = await Promise.all(uploads.map(u => {
+    if (u.type === 'application/pdf') return Promise.resolve(null);
+    return Promise.resolve(u.url);
+  }));
+  const validMockups = mockupImgs.filter(Boolean);
+
+  // Convert placement art files to data URLs (so they show on proof)
+  const plEntries = Array.from(document.querySelectorAll('.pl-entry')).filter(e => e._artFile);
+  const plArtDataUrls = await Promise.all(plEntries.map(e => {
+    const file = e._artFile;
+    if (!file || !file.type.startsWith('image/')) return Promise.resolve(null);
+    return new Promise(res => {
+      const r = new FileReader();
+      r.onload = ev => res({
+        url: ev.target.result,
+        loc: e.querySelector('.pl-loc').options[e.querySelector('.pl-loc').selectedIndex].text,
+        name: file.name,
+      });
+      r.onerror = () => res(null);
+      r.readAsDataURL(file);
+    });
+  }));
+  const validPlArt = plArtDataUrls.filter(Boolean);
+
+  // Build HTML
+  const mockupHtml = validMockups.length ? validMockups.map(url =>
+    `<div style="flex:1;display:flex;flex-direction:column;align-items:center;min-width:0">
+       <img src="${url}" style="max-width:100%;max-height:340px;width:auto;height:auto;object-fit:contain;display:block"/>
+     </div>`
+  ).join('') : '<div style="color:#888780;font-size:13px;padding:40px 0">No mockup images</div>';
+
+  const placementHtml = placements.length ? placements.map(p => {
+    const parts = [];
+    if (p.w && p.h) parts.push(`${p.w}" W × ${p.h}" H`);
+    if (p.collar) parts.push(`${p.collar}" from collar`);
+    if (p.desc) parts.push(p.desc);
+    return `<span style="font-size:11px"><strong style="color:#386641">${p.method}:</strong> ${parts.join(' · ')}</span>`;
+  }).join('<span style="color:#D3D1C7;margin:0 8px">|</span>') : '';
+
+  const plArtHtml = validPlArt.length ? `
+    <div style="padding:16px;border-top:1px solid #EDEDEB;background:#F8F8F6">
+      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#386641;margin-bottom:10px">Print Placement Art Files</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        ${validPlArt.map(a => `
+          <div style="border:1px solid #EDEDEB;border-radius:6px;padding:8px;background:#fff;display:flex;flex-direction:column;align-items:center;gap:6px;width:170px">
+            <img src="${a.url}" style="max-width:150px;max-height:150px;width:auto;height:auto;object-fit:contain"/>
+            <div style="font-size:10px;color:#386641;font-weight:600;text-align:center">${a.loc}</div>
+            <div style="font-size:9px;color:#888780;font-family:monospace;word-break:break-all;text-align:center">${a.name}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  ` : '';
+
+  const fields = [
+    customer && ['Customer', customer],
+    artwork && ['Artwork', artwork],
+    artNum && ['Art Number', `<span style="font-family:monospace;font-weight:600;color:#386641">${artNum}</span>`],
+    job && ['Order/Job #', job],
+    garment && ['Garment', garment],
+    dropbox && ['Dropbox', `<span style="font-size:10px;color:#0061fe;word-break:break-all">${dropbox}</span>`],
+    notes && ['Notes', notes],
+  ].filter(Boolean);
+
+  const detailsHtml = fields.length ? `
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px 20px;padding:16px;border-top:1px solid #EDEDEB">
+      ${fields.map(([l,v]) => `<div><div style="font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#386641;margin-bottom:2px">${l}</div><div style="font-size:12px;color:#1a1a18">${v}</div></div>`).join('')}
+    </div>
+  ` : '';
+
+  const dateDisplay = date ? new Date(date+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '';
+
+  const fullHtml = `
+    <div style="width:780px;background:#fff;font-family:DM Sans,Arial,sans-serif;color:#1a1a18">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid #EDEDEB">
+        <div style="font-weight:700;font-size:14px;color:#386641">Mirror Image — Proof</div>
+        <div style="font-size:11px;color:#888780;font-family:monospace">${artNum}</div>
+      </div>
+      ${placementHtml ? `<div style="padding:10px 16px;background:#F0F5EE;font-size:11px">${placementHtml}</div>` : ''}
+      <div style="background:#E8E8E6;padding:20px;display:flex;gap:16px;align-items:center;justify-content:center;min-height:380px">
+        ${mockupHtml}
+      </div>
+      ${plArtHtml}
+      ${detailsHtml}
+      <div style="display:flex;justify-content:space-between;padding:10px 16px;border-top:1px solid #EDEDEB;font-size:10px;color:#888780">
+        <span>Mirror Image · ${customer} · ${artwork}</span>
+        <span>${dateDisplay}</span>
+      </div>
+    </div>
+  `;
+
+  // Render in offscreen wrapper
   const wrapper = document.createElement('div');
-  wrapper.style.cssText = 'position:fixed;top:-99999px;left:-99999px;width:800px;background:#fff;z-index:-9999;font-family:DM Sans,sans-serif;';
+  wrapper.style.cssText = 'position:fixed;top:-99999px;left:-99999px;width:800px;background:#fff;z-index:-9999';
+  wrapper.innerHTML = fullHtml;
   document.body.appendChild(wrapper);
 
-  // Clone and style
-  const clone = source.cloneNode(true);
-  clone.style.cssText = 'width:800px;display:block;';
-
-  // Fix mockup area to fixed height
-  const mxClone = clone.querySelector('#proofMockups');
-  if (mxClone) {
-    mxClone.style.cssText = 'display:flex;height:380px;background:#E8E8E6;padding:16px;align-items:center;justify-content:center;gap:16px;overflow:hidden;';
-    // Fix each image item
-    mxClone.querySelectorAll('.proof-mockup-item').forEach(item => {
-      item.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:6px;flex:1;height:100%;';
+  // Wait for images to fully load in the offscreen wrapper
+  const imgs = wrapper.querySelectorAll('img');
+  await Promise.all(Array.from(imgs).map(img => {
+    if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+    return new Promise(res => {
+      img.onload = res;
+      img.onerror = res;
+      setTimeout(res, 3000);
     });
-    mxClone.querySelectorAll('.proof-mockup-img-wrap').forEach(wrap => {
-      wrap.style.cssText = 'display:flex;align-items:center;justify-content:center;background:#E8E8E6;flex:1;height:340px;overflow:hidden;';
-    });
-    mxClone.querySelectorAll('img').forEach(img => {
-      img.style.cssText = 'max-height:320px;max-width:320px;width:auto;height:auto;object-fit:contain;display:block;';
-      img.crossOrigin = 'anonymous';
-    });
-  }
-
-  // Remove aspect-ratio from proof wrap in clone
-  clone.style.aspectRatio = 'unset';
-  wrapper.appendChild(clone);
-
-  // Wait for images to be ready
-  await new Promise(r => setTimeout(r, 600));
+  }));
 
   return new Promise((resolve, reject) => {
     html2pdf().set({
-      margin: [8, 8, 8, 8],
+      margin: [10, 10, 10, 10],
       image: { type: 'jpeg', quality: 0.95 },
-      html2canvas: {
-        scale: 1.5,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: '#ffffff',
-        logging: false,
-        windowWidth: 800,
-      },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      html2canvas: { scale: 2, useCORS: true, allowTaint: true, backgroundColor: '#ffffff', logging: false, windowWidth: 800 },
+      jsPDF: { unit: 'mm', format: 'letter', orientation: 'portrait' },
       pagebreak: { mode: 'avoid-all' },
-    }).from(clone).outputPdf('blob').then(blob => {
+    }).from(wrapper.firstElementChild).outputPdf('blob').then(blob => {
       document.body.removeChild(wrapper);
       resolve(blob);
     }).catch(err => {
