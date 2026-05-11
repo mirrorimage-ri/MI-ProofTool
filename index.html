@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mirror Image — Proof Builder v6</title>
+<title>Mirror Image Proof Builder</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap');
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -170,7 +170,7 @@
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:16px">
-    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v7r14</span></span>
+    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v7r16</span></span>
     <div class="db-status" id="dbStatus">
       <div class="db-dot checking" id="dbDot"></div>
       <span id="dbLabel">Checking DB…</span>
@@ -1208,67 +1208,76 @@ function loadJob(val) {
   document.getElementById('proofPlBar').style.display = 'none';
 }
 
-function generateProofBlob() {
+async function generateProofBlob() {
+  const el = document.getElementById('proofOutput');
+
+  // Pre-convert all blob/data URL images to canvas elements so html2canvas can read them
+  const imgs = Array.from(el.querySelectorAll('img'));
+  const savedSrcs = imgs.map(img => img.src);
+
+  await Promise.all(imgs.map(img => new Promise(res => {
+    if (!img.src) { res(); return; }
+    const c = document.createElement('canvas');
+    c.width  = img.naturalWidth  || img.offsetWidth  || 300;
+    c.height = img.naturalHeight || img.offsetHeight || 300;
+    const ctx = c.getContext('2d');
+    const tmp = new Image();
+    tmp.crossOrigin = 'anonymous';
+    tmp.onload  = () => { ctx.drawImage(tmp, 0, 0, c.width, c.height); img.src = c.toDataURL('image/jpeg', 0.92); res(); };
+    tmp.onerror = () => res();
+    tmp.src = img.src;
+  })));
+
+  // Snapshot the proof at fixed size
+  const savedStyle = el.getAttribute('style') || '';
+  el.style.cssText = 'width:816px!important;max-width:816px!important;aspect-ratio:unset!important;display:block!important;position:relative!important;';
+  const mx = el.querySelector('#proofMockups');
+  const savedMx = mx ? (mx.getAttribute('style') || '') : '';
+  if (mx) mx.style.cssText = 'display:flex!important;height:400px!important;overflow:hidden!important;background:#E8E8E6!important;padding:16px!important;align-items:center!important;justify-content:center!important;gap:16px!important;';
+
+  await new Promise(r => setTimeout(r, 400));
+
   return new Promise((resolve, reject) => {
-    // Clone the proof element into an isolated off-screen container
-    // so html2canvas sees a clean fixed-size render with no flex collapse
-    const source = document.getElementById('proofOutput');
-    const clone  = source.cloneNode(true);
-
-    // Apply fully explicit sizing to clone and all child images
-    const wrapper = document.createElement('div');
-    wrapper.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:816px;background:#fff;z-index:-1;';
-    clone.style.cssText    = 'width:816px;max-width:816px;display:block;aspect-ratio:unset;';
-
-    // Fix mockup area in clone
-    const mxClone = clone.querySelector('#proofMockups');
-    if (mxClone) {
-      mxClone.style.cssText = 'display:flex;height:420px;overflow:hidden;background:#E8E8E6;padding:16px;align-items:center;justify-content:center;gap:16px;';
-    }
-    // Fix all images in clone to have explicit dimensions
-    clone.querySelectorAll('img').forEach(img => {
-      img.style.cssText = 'max-height:380px;max-width:380px;width:auto;height:auto;object-fit:contain;display:block;';
+    // Use html2canvas to capture
+    const script = document.createElement('script');
+    // html2canvas is loaded via html2pdf bundle — access it directly
+    const h2p = window.html2pdf;
+    h2p().set({
+      margin: [8,8,8,8],
+      image: {type:'jpeg', quality:0.95},
+      html2canvas: {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        windowWidth: 816,
+        onclone: (clonedDoc) => {
+          // In the clone, make sure images have explicit sizes
+          clonedDoc.querySelectorAll('.proof-mockup-img-wrap img').forEach(img => {
+            img.style.cssText = 'max-width:350px;max-height:350px;width:auto;height:auto;display:block;object-fit:contain;';
+          });
+          clonedDoc.querySelectorAll('.proof-mockup-img-wrap').forEach(wrap => {
+            wrap.style.cssText = 'display:flex;align-items:center;justify-content:center;background:#E8E8E6;width:350px;height:350px;';
+          });
+        }
+      },
+      jsPDF: {unit:'mm', format:'letter', orientation:'portrait'},
+      pagebreak: {mode:'avoid-all'}
+    }).from(el).outputPdf('blob').then(blob => {
+      // Restore everything
+      el.setAttribute('style', savedStyle);
+      if (mx) mx.setAttribute('style', savedMx);
+      imgs.forEach((img, i) => { img.src = savedSrcs[i]; });
+      resolve(blob);
+    }).catch(err => {
+      el.setAttribute('style', savedStyle);
+      if (mx) mx.setAttribute('style', savedMx);
+      imgs.forEach((img, i) => { img.src = savedSrcs[i]; });
+      reject(err);
     });
-    // Fix img-wrap divs
-    clone.querySelectorAll('.proof-mockup-img-wrap').forEach(wrap => {
-      wrap.style.cssText = 'display:flex;align-items:center;justify-content:center;background:#E8E8E6;height:380px;max-width:380px;flex:1;';
-    });
-    // Fix items
-    clone.querySelectorAll('.proof-mockup-item').forEach(item => {
-      item.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:6px;flex:1;height:100%;';
-    });
-
-    wrapper.appendChild(clone);
-    document.body.appendChild(wrapper);
-
-    setTimeout(() => {
-      html2pdf().set({
-        margin:[8,8,8,8],
-        image:{type:'jpeg',quality:0.98},
-        html2canvas:{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false,windowWidth:816},
-        jsPDF:{unit:'mm',format:'letter',orientation:'portrait'},
-        pagebreak:{mode:'avoid-all'},
-      }).from(clone).outputPdf('blob').then(blob => {
-        document.body.removeChild(wrapper);
-        resolve(blob);
-      }).catch(err => {
-        document.body.removeChild(wrapper);
-        reject(err);
-      });
-    }, 1000);
   });
 }
-
-// Run DB check after page fully loaded
-window.addEventListener("load", function() {
-  checkDBStatus();
-  setInterval(checkDBStatus, 60000);
-});
-// ── End DB Status + Previous Jobs ─────────────────────────────────────────────
-
-
-
-
 
 </script>
 <div class="pdf-preview-overlay" id="pdfPreviewOverlay">
