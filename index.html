@@ -346,6 +346,36 @@
 </template>
 
 <script>
+l
+const SUPABASE_URL = "https://upyohtshvvdmbubuionh.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVweW9odHNodnZkbWJ1YnVpb25oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgyNTI1MDEsImV4cCI6MjA5MzgyODUwMX0.FXsywxj6FrhLqHAyQ1HEy53lCkNmCL8In1jFUnD1U-U";
+// Safe lazy init — won't crash the rest of the app if CDN fails
+let sb = null;
+function getSB() {
+  if (!sb) {
+    try {
+      sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+        auth: { persistSession: false }
+      });
+    } catch(e) {
+      console.warn('Supabase client init failed:', e);
+    }
+  }
+  return sb;
+}
+
+const METHOD_PREFIX = {
+  'dtf':          't',
+  'dtg':          'd',
+  'embroidery':   'e',
+  'screenprint':  '',
+  'heat transfer':'',
+  'vinyl':        '',
+  'sublimation':  '',
+  'patch':        '',
+  'other':        '',
+};
+
 let uploads = [];
 let plCount = 0;
 document.getElementById('proofDate').valueAsDate = new Date();
@@ -587,6 +617,9 @@ function getDbxFolder(artNum) {
 let dbxToken   = localStorage.getItem('dbx_token') || null;
 let artFileObj = null;
 
+
+
+
 (function handleOAuthReturn() {
   const hash = window.location.hash;
   if (hash.includes('access_token=')) {
@@ -801,36 +834,74 @@ function clearForm() {
   document.getElementById('proofDetails').innerHTML='';
 }
 
-// ── Supabase ──────────────────────────────────────────────────────────────
-const SUPABASE_URL = "https://upyohtshvvdmbubuionh.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVweW9odHNodnZkbWJ1YnVpb25oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgyNTI1MDEsImV4cCI6MjA5MzgyODUwMX0.FXsywxj6FrhLqHAyQ1HEy53lCkNmCL8In1jFUnD1U-U";
-// Safe lazy init — won't crash the rest of the app if CDN fails
-let sb = null;
-function getSB() {
-  if (!sb) {
-    try {
-      sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-        auth: { persistSession: false }
-      });
-    } catch(e) {
-      console.warn('Supabase client init failed:', e);
-    }
+
+
+
+(function handleOAuthReturn() {
+  const hash = window.location.hash;
+  if (hash.includes('access_token=')) {
+    const params = new URLSearchParams(hash.replace('#','?'));
+    const token = params.get('access_token');
+    if (token) { dbxToken = token; localStorage.setItem('dbx_token', token); history.replaceState(null,'',window.location.pathname); }
   }
-  return sb;
-}
+  updateDbxUI();
+})();
 
-const METHOD_PREFIX = {
-  'dtf':          't',
-  'dtg':          'd',
-  'embroidery':   'e',
-  'screenprint':  '',
-  'heat transfer':'',
-  'vinyl':        '',
-  'sublimation':  '',
-  'patch':        '',
-  'other':        '',
-};
 
+
+artZone.addEventListener('dragover', e=>{ e.preventDefault(); artZone.classList.add('dragover'); });
+artZone.addEventListener('dragleave', ()=>artZone.classList.remove('dragover'));
+artZone.addEventListener('drop', e=>{ e.preventDefault(); artZone.classList.remove('dragover'); if(e.dataTransfer.files[0]) setArtFile(e.dataTransfer.files[0]); });
+
+
+
+
+
+
+
+
+
+
+
+
+addPlacement();
+
+
+
+
+// ── Supabase ──────────────────────────────────────────────────────────────
+
+(function handleOAuthReturn() {
+  const hash = window.location.hash;
+  if (hash.includes('access_token=')) {
+    const params = new URLSearchParams(hash.replace('#','?'));
+    const token = params.get('access_token');
+    if (token) { dbxToken = token; localStorage.setItem('dbx_token', token); history.replaceState(null,'',window.location.pathname); }
+  }
+  updateDbxUI();
+})();
+
+
+
+artZone.addEventListener('dragover', e=>{ e.preventDefault(); artZone.classList.add('dragover'); });
+artZone.addEventListener('dragleave', ()=>artZone.classList.remove('dragover'));
+artZone.addEventListener('drop', e=>{ e.preventDefault(); artZone.classList.remove('dragover'); if(e.dataTransfer.files[0]) setArtFile(e.dataTransfer.files[0]); });
+
+
+
+
+
+
+
+
+
+
+addPlacement();
+
+
+
+
+// ── Supabase ──────────────────────────────────────────────────────────────
 // Returns the primary decoration method from the first placement entry
 function getPrimaryMethod() {
   const first = document.querySelector('.pl-method');
@@ -1055,7 +1126,6 @@ setInterval(checkDBStatus, 60000);
 
 
 </script>
-
 <div class="upload-overlay" id="uploadOverlay">
   <div class="upload-modal">
     <h3>Confirm Dropbox Upload</h3>
