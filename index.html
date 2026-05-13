@@ -170,7 +170,7 @@
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:16px">
-    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v8r4</span></span>
+    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v8r5</span></span>
     <div class="db-status" id="dbStatus">
       <div class="db-dot checking" id="dbDot"></div>
       <span id="dbLabel">Checking DB…</span>
@@ -574,9 +574,18 @@ async function generateProof() {
   const mx=document.getElementById('proofMockups');
   if(uploads.length){
     const count = uploads.length;
-    // Each item gets equal share of width; images fill the full mockup area height
-    const itemFlex = '1 1 ' + Math.floor(90/count) + '%';
-    mx.innerHTML=uploads.map(f=>'<div class="proof-mockup-item" style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:'+itemFlex+';min-width:0;height:100%">'+(f.type==='application/pdf'?'<div class="proof-mockup-img-wrap" style="width:100%;flex:1;min-height:0"><div style="padding:20px;font-size:12px;color:#888780">PDF: '+f.name+'</div></div>':'<div class="proof-mockup-img-wrap" style="width:100%;flex:1;min-height:0"><img src="'+f.url+'" alt="'+f.name+'" style="width:100%;height:100%;object-fit:contain"></div>')+'<div class="proof-mockup-lbl">'+f.name.replace(/\.[^.]+$/,'')+'</div></div>').join('');
+    // Each item is sized to fit alongside the others, but does NOT grow to fill
+    // the row — `flex:0 1 auto` + a calc()'d max-width keeps them at natural
+    // size so a single mockup sits centered, two sit side-by-side, etc.
+    const maxW = 'calc((100% - ' + ((count-1)*16) + 'px) / ' + count + ')';
+    mx.innerHTML = uploads.map(f =>
+      '<div class="proof-mockup-item" style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:0 1 auto;max-width:'+maxW+';min-width:0;height:100%">' +
+      (f.type==='application/pdf'
+        ? '<div class="proof-mockup-img-wrap" style="width:100%;flex:1;min-height:0;display:flex;align-items:center;justify-content:center"><div style="padding:20px;font-size:12px;color:#888780">PDF: '+f.name+'</div></div>'
+        : '<div class="proof-mockup-img-wrap" style="width:100%;flex:1;min-height:0;display:flex;align-items:center;justify-content:center"><img src="'+f.url+'" alt="'+f.name+'" style="max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain"></div>'
+      ) +
+      '<div class="proof-mockup-lbl">'+f.name.replace(/\.[^.]+$/,'')+'</div></div>'
+    ).join('');
   } else { mx.innerHTML='<div style="color:#6A994E;font-size:13px;padding:3rem 0">No mockup images uploaded.</div>'; }
   // Show placement art as image thumbnails (or file-type placeholder for non-images)
   const plArtSection = document.getElementById('proofPlacementArt');
@@ -1095,87 +1104,281 @@ function loadJob(val) {
   document.getElementById('proofPlBar').style.display = 'none';
 }
 
+// ── Image measurement helpers (used by generateProofBlob) ──
+// html2canvas does NOT respect CSS max-width/max-height/object-fit/flex
+// reliably — it renders images at their intrinsic pixel size unless we set
+// width/height attributes explicitly. So before building the PDF HTML, we
+// measure every image's natural size and pre-compute fit-to-box dimensions.
+
+function measureImage(dataUrl) {
+  return new Promise(resolve => {
+    if (!dataUrl) { resolve({ w: 400, h: 300 }); return; }
+    const img = new Image();
+    img.onload  = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+    img.onerror = () => resolve({ w: 400, h: 300 });
+    img.src = dataUrl;
+  });
+}
+
+function fitToBox(natW, natH, maxW, maxH) {
+  if (!natW || !natH) return { w: maxW, h: maxH };
+  const ratio = Math.min(maxW / natW, maxH / natH, 1);
+  return { w: Math.round(natW * ratio), h: Math.round(natH * ratio) };
+}
+
+function readFileAsDataURL(file) {
+  return new Promise(resolve => {
+    if (!file) { resolve(null); return; }
+    const r = new FileReader();
+    r.onload  = ev => resolve(ev.target.result);
+    r.onerror = () => resolve(null);
+    r.readAsDataURL(file);
+  });
+}
+
 async function generateProofBlob() {
-  // ── v8r4 PDF strategy: capture the LIVE #proofOutput element ──
-  // Earlier versions built separate HTML from scratch and rendered that. Two
-  // problems with that approach:
-  //   1) html2canvas ignored CSS constraints like max-width:100% / max-height
-  //      on images, so mockup images rendered at their intrinsic pixel size
-  //      (often huge), blowing up the canvas aspect ratio and causing the
-  //      cropped/oversized renders we saw in v8r2 and v8r3.
-  //   2) Maintaining two divergent renderers (preview vs PDF) meant they
-  //      drifted out of sync (e.g. art file thumbnails on PDF but only
-  //      filenames in the preview).
-  // The handoff doc warned "never clone the live DOM" — that was about
-  // CLONING, which strips computed styles. Capturing the live element
-  // directly preserves computed styles and works reliably. We just resize
-  // it to a known 800px width during capture and restore after.
+  // ── v8r5 PDF strategy: from-scratch HTML with PRE-MEASURED images ──
+  //
+  // History of approaches:
+  //   v8r1-v8r2: blank PDFs (offscreen wrapper at -99999px confused html2canvas)
+  //   v8r3:     from-scratch HTML with max-width:100% on images. html2canvas
+  //             IGNORES max-width and renders images at intrinsic size, blowing
+  //             up the aspect ratio. Got oversized "Qualia Research Institute"
+  //             text taking up the whole render.
+  //   v8r4:     captured the live #proofOutput element. The live preview looks
+  //             right in the browser, but html2canvas has its own layout engine
+  //             that can't compute flex:1 / aspect-ratio / height:100%, so the
+  //             render came out solid black.
+  //   v8r5 (this): build HTML from scratch BUT measure each image's natural
+  //             dimensions client-side and set explicit width="X" height="Y"
+  //             attributes (which html2canvas DOES honor). Use inline-block
+  //             instead of flex for layout. Use tables for the details grid.
+  //             Centered mockup row.
 
-  const el = document.getElementById('proofOutput');
-  if (!el) throw new Error('proofOutput element not found');
+  const customer = document.getElementById('customerName').value || '';
+  const artwork  = document.getElementById('artworkName').value  || '';
+  const artNum   = document.getElementById('artNumber').value    || '';
+  const job      = document.getElementById('jobNumber').value    || '';
+  const date     = document.getElementById('proofDate').value    || '';
+  const garment  = document.getElementById('garmentStyle').value || '';
+  const dropbox  = document.getElementById('dropboxLink').value  || '';
+  const notes    = document.getElementById('notes').value        || '';
+  const placements = gatherPl();
 
-  // If the user clicked Export PDF before Generate Proof, regenerate first
-  if (document.getElementById('mainLayout').classList.contains('entry-mode')) {
-    await generateProof();
-  }
-
-  // Show loading overlay so the user doesn't see the brief resize/capture
+  // Show loading overlay early so the user has feedback
   const loadingOverlay = document.createElement('div');
   loadingOverlay.style.cssText = 'position:fixed;inset:0;background:rgba(248,248,246,0.96);z-index:100000;display:flex;align-items:center;justify-content:center;font-family:DM Sans,Arial,sans-serif;';
   loadingOverlay.innerHTML = '<div style="background:#fff;border:1px solid #EDEDEB;border-radius:12px;padding:20px 28px;box-shadow:0 4px 16px rgba(0,0,0,.08);font-size:14px;color:#386641;font-weight:500">Generating PDF…</div>';
   document.body.appendChild(loadingOverlay);
 
-  // Save original sizing and force to a known render size so the PDF looks
-  // the same regardless of viewport. 800px gives the proof room to breathe
-  // and matches the layout the in-tool preview already uses comfortably.
-  const orig = {
-    width:    el.style.width,
-    maxWidth: el.style.maxWidth,
-  };
-  el.style.width    = '800px';
-  el.style.maxWidth = '800px';
-
-  // Yield to the browser so reflow happens, then wait a beat for images
-  // to settle at the new size
-  await new Promise(r => requestAnimationFrame(r));
-  await new Promise(r => setTimeout(r, 200));
-
-  // Make sure every image inside the proof has actually finished loading
-  const imgs = el.querySelectorAll('img');
-  await Promise.all(Array.from(imgs).map(img => {
-    if (img.complete && img.naturalWidth > 0) return Promise.resolve();
-    return new Promise(res => {
-      img.onload  = res;
-      img.onerror = res;
-      setTimeout(res, 3000);
-    });
-  }));
-
-  const cleanup = () => {
-    el.style.width    = orig.width;
-    el.style.maxWidth = orig.maxWidth;
-    if (document.body.contains(loadingOverlay)) document.body.removeChild(loadingOverlay);
-  };
-
   try {
-    const blob = await html2pdf().set({
-      margin: [10, 10, 10, 10],
-      image: { type: 'jpeg', quality: 0.95 },
-      html2canvas: {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: '#ffffff',
-        logging: false,
-      },
-      jsPDF: { unit: 'mm', format: 'letter', orientation: 'portrait' },
-      pagebreak: { mode: 'avoid-all' },
-    }).from(el).outputPdf('blob');
+    // ── Mockup images: measure each, compute fit-to-box dimensions ──
+    const mockupItems = uploads.filter(u => u.type !== 'application/pdf');
+    const N = mockupItems.length;
+    const PROOF_W = 800;
+    const ROW_PAD = 20;            // padding on the mockup row
+    const ROW_GAP = 16;             // gap between mockup items
+    const INNER_W = PROOF_W - 2 * ROW_PAD;
+    const ITEM_MAX_W = N ? Math.floor((INNER_W - ROW_GAP * (N - 1)) / N) : 0;
+    const ITEM_MAX_H = 360;
 
-    cleanup();
-    return blob;
+    const mockupBoxes = await Promise.all(mockupItems.map(async u => {
+      const dim = await measureImage(u.url);
+      const fit = fitToBox(dim.w, dim.h, ITEM_MAX_W, ITEM_MAX_H);
+      return { url: u.url, name: u.name, w: fit.w, h: fit.h };
+    }));
+
+    // ── Placement art: read each file, measure if image, compute fit ──
+    const plEntries = Array.from(document.querySelectorAll('.pl-entry')).filter(e => e._artFile);
+    const PL_BOX = 120;   // max width/height of art thumbnail
+    const plArtItems = await Promise.all(plEntries.map(async e => {
+      const file = e._artFile;
+      const locVal = e.querySelector('.pl-loc').value;
+      const locTxt = e.querySelector('.pl-loc').options[e.querySelector('.pl-loc').selectedIndex].text;
+      const sfx = PLACEMENT_SUFFIX[locVal] || locVal.toUpperCase();
+      const ext = file.name.split('.').pop();
+      const fname = (artNum || 'ART') + '-' + sfx + '.' + ext;
+      const isImg = file.type && file.type.startsWith('image/');
+      const url = isImg ? await readFileAsDataURL(file) : null;
+      let w = 0, h = 0;
+      if (url) {
+        const dim = await measureImage(url);
+        const fit = fitToBox(dim.w, dim.h, PL_BOX, PL_BOX);
+        w = fit.w; h = fit.h;
+      }
+      return { url, fname, loc: locTxt, ext: ext.toUpperCase(), w, h };
+    }));
+
+    // ── Build HTML strings ──
+    // NOTE: every <img> gets explicit width="X" height="Y" attributes
+    // (NOT just CSS) — html2canvas reads these attributes directly.
+
+    // Mockup row — inline-block (html2canvas-safe). font-size:0 on container
+    // kills the whitespace between inline-blocks; restored on inner content.
+    const mockupHtml = mockupBoxes.length
+      ? mockupBoxes.map(m => `
+          <div style="display:inline-block;vertical-align:middle;margin:0 ${ROW_GAP/2}px;font-size:11px;text-align:center">
+            <img src="${m.url}" width="${m.w}" height="${m.h}" style="display:block;margin:0 auto;width:${m.w}px;height:${m.h}px"/>
+            <div style="margin-top:6px;color:#386641;font-weight:500">${(m.name||'').replace(/\.[^.]+$/, '')}</div>
+          </div>
+        `).join('')
+      : '<div style="font-size:13px;color:#888780;padding:40px 0">No mockup images</div>';
+
+    // Placement bar (decoration method + sizes)
+    const placementBarHtml = placements.length
+      ? placements.map(p => {
+          const parts = [];
+          if (p.w && p.h) parts.push(`${p.w}" W &times; ${p.h}" H`);
+          if (p.collar) parts.push(`${p.collar}" from collar`);
+          if (p.desc) parts.push(p.desc);
+          return `<span style="font-size:11px"><strong style="color:#386641">${p.method}:</strong> ${p.loc} &middot; ${parts.join(' &middot; ')}</span>`;
+        }).join('<span style="color:#D3D1C7;margin:0 8px">|</span>')
+      : '';
+
+    // Placement art row
+    const plArtHtml = plArtItems.length ? `
+      <div style="padding:16px;border-top:1px solid #EDEDEB;background:#F8F8F6;font-size:0;text-align:center">
+        <div style="text-align:left;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#386641;margin-bottom:10px">Print Placement Art</div>
+        ${plArtItems.map(a => `
+          <div style="display:inline-block;vertical-align:top;width:140px;text-align:center;margin:0 6px 6px;font-size:10px;border:1px solid #EDEDEB;padding:8px;background:#fff;border-radius:6px;box-sizing:border-box">
+            ${a.url
+              ? `<img src="${a.url}" width="${a.w}" height="${a.h}" style="display:block;margin:0 auto;width:${a.w}px;height:${a.h}px"/>`
+              : `<div style="width:120px;height:120px;display:inline-block;background:#f1efe8;border-radius:4px;line-height:120px;font-size:14px;color:#888780;font-weight:600">${a.ext}</div>`
+            }
+            <div style="margin-top:6px;color:#386641;font-weight:600">${a.loc}</div>
+            <div style="margin-top:2px;color:#0061fe;font-family:monospace;font-size:9px;word-break:break-all;line-height:1.3">${a.fname}</div>
+          </div>
+        `).join('')}
+      </div>
+    ` : '';
+
+    // Details grid — use a TABLE because html2canvas is rock-solid on tables
+    // and unreliable on CSS grid.
+    const fields = [
+      customer  && ['Customer',     customer],
+      artwork   && ['Artwork',      artwork],
+      artNum    && ['Art Number',  `<span style="font-family:monospace;font-weight:600;color:#386641">${artNum}</span>`],
+      job       && ['Order/Job #', job],
+      garment   && ['Garment',     garment],
+      dropbox   && ['Dropbox',     `<span style="font-size:10px;color:#0061fe;word-break:break-all">${dropbox}</span>`],
+      notes     && ['Notes',       notes],
+    ].filter(Boolean);
+
+    // Render fields as a 2-column table, two cells per row
+    let detailsRows = '';
+    for (let i = 0; i < fields.length; i += 2) {
+      const a = fields[i];
+      const b = fields[i+1];
+      detailsRows += `<tr>
+        <td style="width:50%;padding:8px 12px;vertical-align:top">
+          <div style="font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#386641;margin-bottom:3px">${a[0]}</div>
+          <div style="font-size:12px;color:#1a1a18">${a[1]}</div>
+        </td>
+        <td style="width:50%;padding:8px 12px;vertical-align:top">
+          ${b ? `<div style="font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#386641;margin-bottom:3px">${b[0]}</div><div style="font-size:12px;color:#1a1a18">${b[1]}</div>` : ''}
+        </td>
+      </tr>`;
+    }
+    // Add placement details rows (one per placement)
+    placements.forEach((p, i) => {
+      const detail = [
+        (p.w && p.h) ? `${p.w}" W &times; ${p.h}" H` : (p.w || p.h || ''),
+        p.collar ? `${p.collar}" from collar` : '',
+        p.center ? `${p.center}" from center` : '',
+        p.method, p.colors, p.desc,
+      ].filter(Boolean).join(' &middot; ');
+      detailsRows += `<tr><td colspan="2" style="padding:8px 12px;vertical-align:top">
+        <div style="font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#386641;margin-bottom:3px">Placement ${i+1} — ${p.loc}</div>
+        <div style="font-size:12px;color:#1a1a18">${detail}</div>
+      </td></tr>`;
+    });
+
+    const detailsHtml = detailsRows ? `
+      <table style="width:100%;border-collapse:collapse;border-top:1px solid #EDEDEB">${detailsRows}</table>
+    ` : '';
+
+    const dateDisplay = date
+      ? new Date(date+'T00:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })
+      : new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+
+    // Full proof — pure inline-block / table layout, no flex, no aspect-ratio
+    const fullHtml = `
+      <div style="width:${PROOF_W}px;background:#fff;font-family:DM Sans,Arial,sans-serif;color:#1a1a18">
+        <table style="width:100%;border-collapse:collapse;border-bottom:1px solid #EDEDEB">
+          <tr>
+            <td style="padding:14px 16px;font-weight:700;font-size:14px;color:#386641">Mirror Image &mdash; Proof</td>
+            <td style="padding:14px 16px;font-size:11px;color:#888780;font-family:monospace;text-align:right">${artNum}</td>
+          </tr>
+        </table>
+        ${placementBarHtml ? `<div style="padding:10px 16px;background:#F0F5EE;font-size:11px">${placementBarHtml}</div>` : ''}
+        <div style="background:#E8E8E6;padding:${ROW_PAD}px ${ROW_PAD}px;text-align:center;font-size:0;min-height:${ITEM_MAX_H + 40}px">
+          ${mockupHtml}
+        </div>
+        ${plArtHtml}
+        ${detailsHtml}
+        <table style="width:100%;border-collapse:collapse;border-top:1px solid #EDEDEB">
+          <tr>
+            <td style="padding:10px 16px;font-size:10px;color:#888780">Mirror Image &middot; ${customer} &middot; ${artwork}</td>
+            <td style="padding:10px 16px;font-size:10px;color:#888780;text-align:right">Generated ${dateDisplay}</td>
+          </tr>
+        </table>
+      </div>
+    `;
+
+    // Render in an on-screen wrapper at top:0/left:0 — hidden under the
+    // loading overlay so the user never sees it but html2canvas can capture
+    // it cleanly (no off-screen positioning weirdness).
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = `position:fixed;top:0;left:0;width:${PROOF_W}px;background:#fff;z-index:1;`;
+    wrapper.innerHTML = fullHtml;
+    document.body.appendChild(wrapper);
+
+    const cleanup = () => {
+      if (document.body.contains(wrapper)) document.body.removeChild(wrapper);
+      if (document.body.contains(loadingOverlay)) document.body.removeChild(loadingOverlay);
+    };
+
+    // Wait for every <img> inside the wrapper to be fully decoded
+    const imgs = wrapper.querySelectorAll('img');
+    await Promise.all(Array.from(imgs).map(img => {
+      if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+      return new Promise(res => {
+        img.onload  = res;
+        img.onerror = res;
+        setTimeout(res, 3000);
+      });
+    }));
+
+    // Force a layout pass so heights settle
+    // eslint-disable-next-line no-unused-expressions
+    wrapper.firstElementChild.offsetHeight;
+    await new Promise(r => setTimeout(r, 100));
+
+    try {
+      const blob = await html2pdf().set({
+        margin: [10, 10, 10, 10],
+        image: { type: 'jpeg', quality: 0.95 },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: '#ffffff',
+          logging: false,
+          windowWidth: PROOF_W,
+        },
+        jsPDF: { unit: 'mm', format: 'letter', orientation: 'portrait' },
+        pagebreak: { mode: 'avoid-all' },
+      }).from(wrapper.firstElementChild).outputPdf('blob');
+
+      cleanup();
+      return blob;
+    } catch(err) {
+      cleanup();
+      throw err;
+    }
   } catch(err) {
-    cleanup();
+    // Outer catch — in case anything above the wrapper-creation threw
+    if (document.body.contains(loadingOverlay)) document.body.removeChild(loadingOverlay);
     throw err;
   }
 }
