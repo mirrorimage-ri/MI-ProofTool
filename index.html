@@ -170,7 +170,7 @@
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:16px">
-    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v8r2</span></span>
+    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v8r3</span></span>
     <div class="db-status" id="dbStatus">
       <div class="db-dot checking" id="dbDot"></div>
       <span id="dbLabel">Checking DB…</span>
@@ -1168,18 +1168,34 @@ async function generateProofBlob() {
     </div>
   `;
 
-  // Render in offscreen wrapper.
-  // IMPORTANT: html2canvas reads getBoundingClientRect() to compute its draw
-  // region. position:fixed with extreme negative offsets returns coordinates
-  // outside the viewport and produces blank/clipped canvases. position:absolute
-  // with left:-9999px keeps the element in the normal layout flow (so it has
-  // real, non-negative client coords for rendering) while staying off-screen.
+  // ── PDF render strategy (v8r3) ──
+  // html2canvas is finicky about elements positioned far off-screen — passing
+  // explicit width/height without matching x/y caused v8r2's "cropped slice"
+  // bug. The reliable approach is: render the wrapper at top:0/left:0 (where
+  // html2canvas captures cleanly with no special config), and cover it with a
+  // full-screen loading overlay so the user never sees it. As a bonus the user
+  // gets clear feedback during the render.
+
+  // Loading overlay - covers the entire viewport above the wrapper
+  const loadingOverlay = document.createElement('div');
+  loadingOverlay.style.cssText = 'position:fixed;inset:0;background:rgba(248,248,246,0.96);z-index:100000;display:flex;align-items:center;justify-content:center;font-family:DM Sans,Arial,sans-serif;';
+  loadingOverlay.innerHTML = '<div style="background:#fff;border:1px solid #EDEDEB;border-radius:12px;padding:20px 28px;box-shadow:0 4px 16px rgba(0,0,0,.08);font-size:14px;color:#386641;font-weight:500">Generating PDF…</div>';
+  document.body.appendChild(loadingOverlay);
+
+  // Wrapper for the proof content - positioned at top:0/left:0 (under the
+  // overlay, so invisible to the user but at a clean position for html2canvas)
   const wrapper = document.createElement('div');
-  wrapper.style.cssText = 'position:absolute;left:-9999px;top:0;width:800px;background:#fff;';
+  wrapper.style.cssText = 'position:fixed;top:0;left:0;width:800px;background:#fff;z-index:1;';
   wrapper.innerHTML = fullHtml;
   document.body.appendChild(wrapper);
 
-  // Wait for images to fully load in the offscreen wrapper
+  // Helper to clean up both DOM nodes whether render succeeds or fails
+  const cleanup = () => {
+    if (document.body.contains(wrapper)) document.body.removeChild(wrapper);
+    if (document.body.contains(loadingOverlay)) document.body.removeChild(loadingOverlay);
+  };
+
+  // Wait for images to fully load in the wrapper
   const imgs = wrapper.querySelectorAll('img');
   await Promise.all(Array.from(imgs).map(img => {
     if (img.complete && img.naturalWidth > 0) return Promise.resolve();
@@ -1190,17 +1206,18 @@ async function generateProofBlob() {
     });
   }));
 
-  // The actual element we render is wrapper.firstElementChild (the 780px-wide
-  // proof div). Make sure it's measurable BEFORE handing it to html2pdf —
-  // a forced reflow guarantees layout is complete.
+  // Force a layout pass so heights settle before html2canvas measures
   const renderTarget = wrapper.firstElementChild;
   // eslint-disable-next-line no-unused-expressions
-  renderTarget.offsetHeight; // force reflow
+  renderTarget.offsetHeight;
 
   return new Promise((resolve, reject) => {
     html2pdf().set({
       margin: [10, 10, 10, 10],
       image: { type: 'jpeg', quality: 0.95 },
+      // Note: no explicit width/height/x/y — let html2canvas auto-detect from
+      // the source element. Passing explicit width/height without matching
+      // x/y is what caused v8r2's cropping bug.
       html2canvas: {
         scale: 2,
         useCORS: true,
@@ -1208,18 +1225,14 @@ async function generateProofBlob() {
         backgroundColor: '#ffffff',
         logging: false,
         windowWidth: 800,
-        // Tell html2canvas the source element's size explicitly so it
-        // doesn't try to infer dimensions from a viewport-relative box.
-        width: renderTarget.offsetWidth,
-        height: renderTarget.offsetHeight,
       },
       jsPDF: { unit: 'mm', format: 'letter', orientation: 'portrait' },
       pagebreak: { mode: 'avoid-all' },
     }).from(renderTarget).outputPdf('blob').then(blob => {
-      document.body.removeChild(wrapper);
+      cleanup();
       resolve(blob);
     }).catch(err => {
-      if (document.body.contains(wrapper)) document.body.removeChild(wrapper);
+      cleanup();
       reject(err);
     });
   });
