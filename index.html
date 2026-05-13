@@ -174,7 +174,7 @@
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:16px">
-    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v8r9</span></span>
+    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v8r10</span></span>
     <div class="db-status" id="dbStatus">
       <div class="db-dot checking" id="dbDot"></div>
       <span id="dbLabel">Checking DB…</span>
@@ -1142,50 +1142,91 @@ function readFileAsDataURL(file) {
   });
 }
 
-// ── PDF image prep (v8r9) ──
-// Two jobs:
-//   1) Downsample big source images so the PDF doesn't carry millions of
-//      unused pixels (v8r7 produced a 38MB PDF because a 2000x2472 source
-//      PNG was embedded at full resolution to display as a thumbnail).
-//   2) Force every image to JPEG with a flat opaque background, eliminating
-//      the soft-mask (smask) objects that PDFs derive from PNG transparency.
-//      Soft masks are the #1 cause of "Illustrator renders this fine but
-//      Chrome shows a black page" — PDF.js is strict about smask edge cases
-//      while Adobe parsers are permissive. JPEGs have no alpha channel and
-//      therefore no smask, which sidesteps the whole class of bug.
-//
+// ── PDF image prep (v8r10) ──
 // Returns { url, format } for use with pdf.addImage(...).
-function prepImageForPDF(dataUrl, natW, natH, maxPx, bgColor) {
-  // bgColor: hex color used as the JPEG's flat background. Default '#ffffff'.
-  // Pass the surrounding region's color so the white edges of the JPEG
-  // (formerly PNG transparency) blend seamlessly into the proof.
+//
+// Why this is here:
+//   - Source images (mockups, placement art) can be huge (2000+px PNGs).
+//   - jsPDF.addImage embeds the FULL source pixels regardless of display
+//     size. v8r7 produced a 38MB PDF because of this.
+//   - PNG with transparency creates "soft mask" objects in the PDF that
+//     PDF.js (used by all browsers) renders as a black rectangle.
+//
+// This function downsamples each image to a print-appropriate resolution,
+// composites it onto a flat opaque background (eliminating transparency),
+// and re-encodes it as PNG. PNG is lossless, so images extracted from the
+// PDF stay sharp.
+//
+// CRITICAL: we use createImageBitmap() rather than Image+onload because
+// the Image element's onload fires when bytes are LOADED, but not always
+// when the image is DECODED. drawImage() on a not-yet-decoded image draws
+// black — which is what was happening in v8r9. createImageBitmap() returns
+// a promise that resolves only when the image is fully decoded and ready
+// to render. This guarantees drawImage() draws actual pixels.
+async function prepImageForPDF(dataUrl, natW, natH, maxPx, bgColor) {
+  if (!dataUrl) return null;
   const bg = bgColor || '#ffffff';
-  return new Promise(resolve => {
-    if (!dataUrl) { resolve(null); return; }
-    const img = new Image();
-    img.onload = () => {
-      const w = img.naturalWidth, h = img.naturalHeight;
-      // Downsample if needed, otherwise keep original pixel dimensions
-      const ratio = Math.min(maxPx / w, maxPx / h, 1);
-      const newW = Math.max(1, Math.round(w * ratio));
-      const newH = Math.max(1, Math.round(h * ratio));
+
+  const detectFmt = u =>
+    u.startsWith('data:image/jpeg') ? 'JPEG' :
+    u.startsWith('data:image/webp') ? 'WEBP' : 'PNG';
+
+  // Compute target dimensions
+  const w0 = natW || 1;
+  const h0 = natH || 1;
+  const ratio = Math.min(maxPx / w0, maxPx / h0, 1);
+  const newW = Math.max(1, Math.round(w0 * ratio));
+  const newH = Math.max(1, Math.round(h0 * ratio));
+
+  // Helper: decode the data URL into something drawable
+  async function getDrawable() {
+    // Preferred: createImageBitmap from a Blob — guarantees full decode
+    if (typeof createImageBitmap === 'function') {
       try {
-        const canvas = document.createElement('canvas');
-        canvas.width = newW;
-        canvas.height = newH;
-        const ctx = canvas.getContext('2d');
-        ctx.fillStyle = bg;
-        ctx.fillRect(0, 0, newW, newH);
-        ctx.drawImage(img, 0, 0, newW, newH);
-        resolve({ url: canvas.toDataURL('image/jpeg', 0.85), format: 'JPEG' });
-      } catch (err) {
-        // Canvas tainted or some other failure — fall back to original
-        resolve({ url: dataUrl, format: dataUrl.startsWith('data:image/jpeg') ? 'JPEG' : 'PNG' });
+        const resp = await fetch(dataUrl);
+        const blob = await resp.blob();
+        return await createImageBitmap(blob);
+      } catch (e) {
+        // fall through to Image fallback
       }
-    };
-    img.onerror = () => resolve({ url: dataUrl, format: dataUrl.startsWith('data:image/jpeg') ? 'JPEG' : 'PNG' });
-    img.src = dataUrl;
-  });
+    }
+    // Fallback: Image element + decode()
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = async () => {
+        if (typeof img.decode === 'function') {
+          try { await img.decode(); } catch (_) { /* may throw if already decoded */ }
+        }
+        resolve(img);
+      };
+      img.onerror = () => reject(new Error('image load failed'));
+      img.src = dataUrl;
+    });
+  }
+
+  try {
+    const drawable = await getDrawable();
+
+    const canvas = document.createElement('canvas');
+    canvas.width = newW;
+    canvas.height = newH;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, newW, newH);
+    ctx.drawImage(drawable, 0, 0, newW, newH);
+
+    // Release ImageBitmap memory if applicable
+    if (drawable && typeof drawable.close === 'function') {
+      try { drawable.close(); } catch (_) {}
+    }
+
+    // PNG output — lossless, and since the canvas was filled before drawImage,
+    // every pixel is fully opaque, so jsPDF won't create a soft mask.
+    return { url: canvas.toDataURL('image/png'), format: 'PNG' };
+  } catch (err) {
+    console.error('prepImageForPDF failed, embedding original:', err);
+    return { url: dataUrl, format: detectFmt(dataUrl) };
+  }
 }
 
 async function generateProofBlob() {
