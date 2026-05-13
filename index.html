@@ -174,7 +174,7 @@
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:16px">
-    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v8r8</span></span>
+    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v8r9</span></span>
     <div class="db-status" id="dbStatus">
       <div class="db-dot checking" id="dbDot"></div>
       <span id="dbLabel">Checking DB…</span>
@@ -626,10 +626,12 @@ async function generateProof() {
         '<div style="display:flex;gap:12px;flex-wrap:wrap">' +
         artData.map(a => `
           <div style="border:1px solid #EDEDEB;border-radius:6px;padding:8px;background:#fff;display:flex;flex-direction:column;align-items:center;gap:6px;width:140px">
-            ${a.url
-              ? `<img src="${a.url}" alt="${a.fname}" style="max-width:120px;max-height:120px;width:auto;height:auto;object-fit:contain;display:block"/>`
-              : `<div style="width:120px;height:120px;display:flex;align-items:center;justify-content:center;background:#f1efe8;border-radius:4px;font-size:14px;color:#888780;font-weight:600">${(a.ext||'FILE').toUpperCase()}</div>`
-            }
+            <div style="width:120px;height:120px;background:#E8E8E6;border-radius:4px;display:flex;align-items:center;justify-content:center;overflow:hidden">
+              ${a.url
+                ? `<img src="${a.url}" alt="${a.fname}" style="max-width:120px;max-height:120px;width:auto;height:auto;object-fit:contain;display:block"/>`
+                : `<span style="font-size:14px;color:#888780;font-weight:600">${(a.ext||'FILE').toUpperCase()}</span>`
+              }
+            </div>
             <div style="font-size:10px;color:#386641;font-weight:600;text-align:center">${a.loc}</div>
             <div style="font-size:9px;color:#0061fe;font-family:monospace;word-break:break-all;text-align:center;line-height:1.3">${a.fname}</div>
           </div>
@@ -1140,34 +1142,30 @@ function readFileAsDataURL(file) {
   });
 }
 
-// ── PDF image prep (v8r8) ──
-// jsPDF.addImage embeds the FULL source pixel data into the PDF regardless
-// of display dimensions. The first working PDF (v8r7) was 38MB because a
-// 2000x2472px hoodie mockup was being embedded at full resolution just to
-// render as a ~600px-wide thumbnail. We downsample to print-appropriate
-// resolution (max 800px on the long edge), composite onto white to handle
-// transparency, and convert to JPEG at 85% quality.
+// ── PDF image prep (v8r9) ──
+// Two jobs:
+//   1) Downsample big source images so the PDF doesn't carry millions of
+//      unused pixels (v8r7 produced a 38MB PDF because a 2000x2472 source
+//      PNG was embedded at full resolution to display as a thumbnail).
+//   2) Force every image to JPEG with a flat opaque background, eliminating
+//      the soft-mask (smask) objects that PDFs derive from PNG transparency.
+//      Soft masks are the #1 cause of "Illustrator renders this fine but
+//      Chrome shows a black page" — PDF.js is strict about smask edge cases
+//      while Adobe parsers are permissive. JPEGs have no alpha channel and
+//      therefore no smask, which sidesteps the whole class of bug.
 //
 // Returns { url, format } for use with pdf.addImage(...).
-function prepImageForPDF(dataUrl, natW, natH, maxPx) {
+function prepImageForPDF(dataUrl, natW, natH, maxPx, bgColor) {
+  // bgColor: hex color used as the JPEG's flat background. Default '#ffffff'.
+  // Pass the surrounding region's color so the white edges of the JPEG
+  // (formerly PNG transparency) blend seamlessly into the proof.
+  const bg = bgColor || '#ffffff';
   return new Promise(resolve => {
     if (!dataUrl) { resolve(null); return; }
-    // Detect format from data URL prefix for fallback
-    const detectFmt = u => {
-      if (!u) return 'PNG';
-      if (u.startsWith('data:image/jpeg')) return 'JPEG';
-      if (u.startsWith('data:image/webp')) return 'WEBP';
-      return 'PNG';
-    };
-    // If source already fits under the cap on both axes, skip canvas round-trip.
-    // (Small icons stay sharp; we only shrink the big stuff.)
-    if (natW && natH && natW <= maxPx && natH <= maxPx) {
-      resolve({ url: dataUrl, format: detectFmt(dataUrl) });
-      return;
-    }
     const img = new Image();
     img.onload = () => {
       const w = img.naturalWidth, h = img.naturalHeight;
+      // Downsample if needed, otherwise keep original pixel dimensions
       const ratio = Math.min(maxPx / w, maxPx / h, 1);
       const newW = Math.max(1, Math.round(w * ratio));
       const newH = Math.max(1, Math.round(h * ratio));
@@ -1176,20 +1174,16 @@ function prepImageForPDF(dataUrl, natW, natH, maxPx) {
         canvas.width = newW;
         canvas.height = newH;
         const ctx = canvas.getContext('2d');
-        // White background — JPEG doesn't support transparency, and the
-        // mockup row in the proof is light gray anyway, so a slight white
-        // edge is acceptable. (Could pass bgColor in if we want to match
-        // each region exactly, but white works fine for now.)
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = bg;
         ctx.fillRect(0, 0, newW, newH);
         ctx.drawImage(img, 0, 0, newW, newH);
         resolve({ url: canvas.toDataURL('image/jpeg', 0.85), format: 'JPEG' });
       } catch (err) {
         // Canvas tainted or some other failure — fall back to original
-        resolve({ url: dataUrl, format: detectFmt(dataUrl) });
+        resolve({ url: dataUrl, format: dataUrl.startsWith('data:image/jpeg') ? 'JPEG' : 'PNG' });
       }
     };
-    img.onerror = () => resolve({ url: dataUrl, format: detectFmt(dataUrl) });
+    img.onerror = () => resolve({ url: dataUrl, format: dataUrl.startsWith('data:image/jpeg') ? 'JPEG' : 'PNG' });
     img.src = dataUrl;
   });
 }
@@ -1253,11 +1247,14 @@ async function generateProofBlob() {
     // ── Prep images (data URLs + natural dimensions + downsampling) ──
     // Mockups get up to 800px on the long edge (rendered at ~75mm wide, that's
     // ~270 DPI — plenty crisp for print). Placement art thumbnails get 400px
-    // (rendered at ~38mm, also ~270 DPI). See prepImageForPDF for details.
+    // (rendered at ~38mm, also ~270 DPI). All images composited onto gray
+    // (#E8E8E6) so that the mockup row gray and the placement art card gray
+    // areas blend seamlessly with the JPEGs' opaque edges.
+    const PROOF_GRAY = '#E8E8E6';
     const mockupSrc = uploads.filter(u => u.type !== 'application/pdf');
     const mockupData = await Promise.all(mockupSrc.map(async m => {
       const dim = await measureImage(m.url);
-      const prep = await prepImageForPDF(m.url, dim.w, dim.h, 800);
+      const prep = await prepImageForPDF(m.url, dim.w, dim.h, 800, PROOF_GRAY);
       return {
         url:  prep ? prep.url    : m.url,
         fmt:  prep ? prep.format : 'PNG',
@@ -1275,7 +1272,7 @@ async function generateProofBlob() {
       if (rawUrl) {
         const dim = await measureImage(rawUrl);
         natW = dim.w; natH = dim.h;
-        const prep = await prepImageForPDF(rawUrl, natW, natH, 400);
+        const prep = await prepImageForPDF(rawUrl, natW, natH, 400, PROOF_GRAY);
         if (prep) { url = prep.url; fmt = prep.format; }
       }
       const locVal = e.querySelector('.pl-loc').value;
@@ -1287,7 +1284,12 @@ async function generateProofBlob() {
     }));
 
     // ── Begin PDF (US Letter, portrait, mm units) ──
-    const pdf = new jsPDFCtor({ unit: 'mm', format: 'letter', orientation: 'portrait' });
+    // compress:true enables FlateDecode on streams — smaller PDF and better
+    // PDF.js compatibility. precision:2 keeps coordinates clean.
+    const pdf = new jsPDFCtor({
+      unit: 'mm', format: 'letter', orientation: 'portrait',
+      compress: true, precision: 2,
+    });
     const PW = pdf.internal.pageSize.getWidth();   // 215.9mm
     const PH = pdf.internal.pageSize.getHeight();  // 279.4mm
     const M  = 12;
@@ -1362,7 +1364,8 @@ async function generateProofBlob() {
         const imgX = slotX + (slotW - w) / 2;
         const imgY = y + pad + (innerH - h) / 2;
         try {
-          pdf.addImage(m.url, m.fmt, imgX, imgY, w, h);
+          // 7th arg is alias (unused), 8th is compression mode for JPEG
+          pdf.addImage(m.url, m.fmt, imgX, imgY, w, h, undefined, 'FAST');
         } catch (err) {
           // Drawing failed (corrupt image or unsupported format) — placeholder
           pdf.setFillColor(220, 220, 218).rect(slotX, y + pad, slotW, innerH, 'F');
@@ -1401,26 +1404,29 @@ async function generateProofBlob() {
         const cardX = M + col * (cardW + cardGap);
         const cardY = y + row * (cardH + cardGap);
 
-        // Card frame
+        // Card frame (white with thin border)
         pdf.setDrawColor(...C.border).setFillColor(255, 255, 255).setLineWidth(0.2);
         pdf.rect(cardX, cardY, cardW, cardH, 'FD');
 
-        // Image (or extension placeholder)
+        // Gray image area (so white artwork is visible — v8r9)
         const imgPadX = 2;
         const imgPadY = 2;
         const innerImgW = cardW - 2 * imgPadX;
+        pdf.setFillColor(...C.grayBg);
+        pdf.rect(cardX + imgPadX, cardY + imgPadY, innerImgW, imgBoxH, 'F');
+
+        // Image (or extension placeholder)
         if (a.url) {
           const ratio = Math.min(innerImgW / a.natW, imgBoxH / a.natH);
           const w = a.natW * ratio;
           const h = a.natH * ratio;
           try {
-            pdf.addImage(a.url, a.fmt, cardX + (cardW - w)/2, cardY + imgPadY + (imgBoxH - h)/2, w, h);
+            pdf.addImage(a.url, a.fmt, cardX + (cardW - w)/2, cardY + imgPadY + (imgBoxH - h)/2, w, h, undefined, 'FAST');
           } catch (err) {
-            pdf.setFillColor(241, 239, 232).rect(cardX + imgPadX, cardY + imgPadY, innerImgW, imgBoxH, 'F');
+            // gray rect is already there as the fallback look
           }
         } else {
-          // Non-image file — render extension as a label
-          pdf.setFillColor(241, 239, 232).rect(cardX + imgPadX, cardY + imgPadY, innerImgW, imgBoxH, 'F');
+          // Non-image file — render extension as a label on gray bg
           pdf.setFont('helvetica', 'bold').setFontSize(11).setTextColor(...C.muted);
           pdf.text(a.ext, cardX + cardW/2, cardY + imgPadY + imgBoxH/2 + 1, { align: 'center' });
         }
