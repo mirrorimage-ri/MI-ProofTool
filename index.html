@@ -174,7 +174,7 @@
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:16px">
-    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v8r15</span></span>
+    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v8r16</span></span>
     <div class="db-status" id="dbStatus">
       <div class="db-dot checking" id="dbDot"></div>
       <span id="dbLabel">Checking DB…</span>
@@ -378,7 +378,7 @@ const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 // ── Tool version (v8r15) ──
 // Bumped whenever the file changes. Appears in the header and PDF footer
 // so any deployed proof can be traced back to the tool revision that made it.
-const TOOL_VERSION = 'V8R15';
+const TOOL_VERSION = 'V8R16';
 
 // Build the timestamp+version string used in proof footers.
 // Format: "YYYY-MM-DD HH:MM TZ Vx.y"  e.g. "2026-05-13 17:24 EST V8R15"
@@ -456,22 +456,54 @@ function handleUpload(e) { Array.from(e.target.files).forEach(processFile); e.ta
 function processFile(file) {
   const id = Date.now() + Math.random();
   const r = new FileReader();
-  r.onload = ev => { uploads.push({id, name:file.name, url:ev.target.result, type:file.type}); renderThumbs(); };
+  r.onload = ev => {
+    // v8r16: track displayName separately from name so users can rename mockups
+    const baseName = file.name.replace(/\.[^.]+$/, '');
+    uploads.push({
+      id,
+      name: file.name,
+      displayName: baseName,
+      url: ev.target.result,
+      type: file.type,
+    });
+    renderThumbs();
+  };
   r.readAsDataURL(file);
 }
 
 function renderThumbs() {
   const c = document.getElementById('thumbs'); c.innerHTML = '';
   uploads.forEach(f => {
-    const w = document.createElement('div'); w.style.cssText='display:flex;flex-direction:column;align-items:center;gap:2px';
+    const w = document.createElement('div');
+    w.style.cssText='display:flex;flex-direction:column;align-items:center;gap:2px';
     const t = document.createElement('div'); t.className='thumb';
-    if (f.type==='application/pdf') { t.innerHTML='<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#f1efe8;font-size:10px;color:#888780;text-align:center">PDF</div>'; }
-    else { const i=document.createElement('img'); i.src=f.url; t.appendChild(i); }
+    if (f.type==='application/pdf') {
+      t.innerHTML='<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#f1efe8;font-size:10px;color:#888780;text-align:center">PDF</div>';
+    } else {
+      const i=document.createElement('img'); i.src=f.url; t.appendChild(i);
+    }
     const rm=document.createElement('button'); rm.className='rm'; rm.innerHTML='&times;';
     rm.onclick=()=>{ uploads=uploads.filter(x=>x.id!==f.id); renderThumbs(); };
     t.appendChild(rm);
-    const l=document.createElement('div'); l.className='thumb-label'; l.textContent=f.name.replace(/\.[^.]+$/,'').slice(0,14);
-    w.appendChild(t); w.appendChild(l); c.appendChild(w);
+    // v8r16: editable display name input (replaces the static label)
+    const labelInput = document.createElement('input');
+    labelInput.type = 'text';
+    labelInput.value = f.displayName || f.name.replace(/\.[^.]+$/,'');
+    labelInput.title = 'Click to rename this mockup (used as the proof label)';
+    labelInput.style.cssText = 'width:96px;padding:2px 4px;border:1px solid transparent;border-radius:3px;font-size:10px;text-align:center;background:transparent;color:#386641;font-weight:500';
+    labelInput.addEventListener('focus', () => {
+      labelInput.style.background = '#fff';
+      labelInput.style.borderColor = '#EDEDEB';
+    });
+    labelInput.addEventListener('blur', () => {
+      labelInput.style.background = 'transparent';
+      labelInput.style.borderColor = 'transparent';
+    });
+    labelInput.addEventListener('input', () => {
+      const u = uploads.find(x => x.id === f.id);
+      if (u) u.displayName = labelInput.value;
+    });
+    w.appendChild(t); w.appendChild(labelInput); c.appendChild(w);
   });
 }
 
@@ -727,14 +759,16 @@ async function generateProof() {
     // the row — `flex:0 1 auto` + a calc()'d max-width keeps them at natural
     // size so a single mockup sits centered, two sit side-by-side, etc.
     const maxW = 'calc((100% - ' + ((count-1)*16) + 'px) / ' + count + ')';
-    mx.innerHTML = uploads.map(f =>
-      '<div class="proof-mockup-item" style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:0 1 auto;max-width:'+maxW+';min-width:0;height:100%">' +
-      (f.type==='application/pdf'
-        ? '<div class="proof-mockup-img-wrap" style="width:100%;flex:1;min-height:0;display:flex;align-items:center;justify-content:center"><div style="padding:20px;font-size:12px;color:#888780">PDF: '+f.name+'</div></div>'
-        : '<div class="proof-mockup-img-wrap" style="width:100%;flex:1;min-height:0;display:flex;align-items:center;justify-content:center"><img src="'+f.url+'" alt="'+f.name+'" style="max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain"></div>'
-      ) +
-      '<div class="proof-mockup-lbl">'+f.name.replace(/\.[^.]+$/,'')+'</div></div>'
-    ).join('');
+    mx.innerHTML = uploads.map(f => {
+      const lbl = (f.displayName || f.name.replace(/\.[^.]+$/, ''))
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      return '<div class="proof-mockup-item" style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:0 1 auto;max-width:'+maxW+';min-width:0;height:100%">' +
+        (f.type==='application/pdf'
+          ? '<div class="proof-mockup-img-wrap" style="width:100%;flex:1;min-height:0;display:flex;align-items:center;justify-content:center"><div style="padding:20px;font-size:12px;color:#888780">PDF: '+f.name+'</div></div>'
+          : '<div class="proof-mockup-img-wrap" style="width:100%;flex:1;min-height:0;display:flex;align-items:center;justify-content:center"><img src="'+f.url+'" alt="'+f.name+'" style="max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain"></div>'
+        ) +
+        '<div class="proof-mockup-lbl">'+lbl+'</div></div>';
+    }).join('');
   } else { mx.innerHTML='<div style="color:#6A994E;font-size:13px;padding:3rem 0">No mockup images uploaded.</div>'; }
   // Show placement art as image thumbnails — grouped by placement when there
   // are multiple variants per placement (v8r13).
@@ -1587,7 +1621,8 @@ async function generateProofBlob() {
         url:  prep ? prep.url    : m.url,
         fmt:  prep ? prep.format : 'PNG',
         name: m.name,
-        natW: dim.w, natH: dim.h,   // keep ORIGINAL dimensions for fit-to-box math
+        displayName: m.displayName || m.name.replace(/\.[^.]+$/, ''),  // v8r16
+        natW: dim.w, natH: dim.h,
       };
     }));
 
@@ -1660,63 +1695,144 @@ async function generateProofBlob() {
     y += 11;
     pdf.setDrawColor(...C.border).setLineWidth(0.2);
     pdf.line(M, y, PW - M, y);
-    y += 2;
+    y += 4;
 
-    // ── Placement bar ──
-    if (placements.length) {
-      const bits = placements.map(p => {
-        const parts = [];
-        if (p.w && p.h) parts.push(`${p.w}" W x ${p.h}" H`);
-        else if (p.w) parts.push(`${p.w}" W`);
-        else if (p.h) parts.push(`${p.h}" H`);
-        if (p.collar) parts.push(`${p.collar}" from collar`);
-        if (p.desc) parts.push(p.desc);
-        return `${p.method}: ${p.loc} - ${parts.join(' / ')}`;
-      });
-      pdf.setFillColor(...C.sageBg).rect(M, y, usableW, 8, 'F');
-      pdf.setFont('helvetica', 'normal').setFontSize(9).setTextColor(...C.green);
-      const barText = bits.join('   |   ');
-      // Truncate if too wide
-      pdf.text(clean(barText), M + 3, y + 5.5, { maxWidth: usableW - 6 });
-      y += 10;
+    // ── v8r16: Header info block (was at bottom in earlier versions) ──
+    // Two-column field grid. All form-level info up top, placement specs
+    // appear inline with the placement art further down.
+    const headerFields = [
+      customer && ['Customer', customer, 'helvetica'],
+      artwork  && ['Artwork', artwork, 'helvetica'],
+      job      && ['Order/Job #', job, 'helvetica'],
+      garment  && ['Garment', garment, 'helvetica'],
+      dropbox  && ['Dropbox', dropbox, 'courier'],
+    ].filter(Boolean);
+
+    // Dynamic font scaling for the header block AND notes together. We pick
+    // ONE scale at the start and apply it consistently. Mockup row and
+    // placement art are fixed in size and not part of the scaling pass.
+    const FOOTER_RESERVED = 8;
+    const DEFAULT_LABEL_PT = 7;
+    const DEFAULT_BODY_PT  = 10;
+    const DEFAULT_LINE_MM  = 4;
+    const DEFAULT_GAP_MM   = 3;
+    const colW = usableW / 2;
+
+    // Header rows + notes ONLY — placement-row content is now inline with
+    // the placement art rendering (and uses its own smaller font).
+    function measureHeaderHeight(bodyPt, lineMm, gapMm) {
+      const labelMm = bodyPt * 0.42;
+      let need = 0;
+      pdf.setFontSize(bodyPt);
+      for (let i = 0; i < headerFields.length; i += 2) {
+        const a = headerFields[i];
+        const b = headerFields[i+1];
+        const aLines = pdf.splitTextToSize(clean(a[1]), colW - 3).length;
+        const bLines = b ? pdf.splitTextToSize(clean(b[1]), colW - 3).length : 0;
+        const rowH = Math.max(aLines, bLines || 1);
+        need += labelMm + rowH * lineMm + gapMm;
+      }
+      if (notes) {
+        const lines = pdf.splitTextToSize(clean(notes), usableW).length;
+        need += labelMm + lines * lineMm + gapMm;
+      }
+      return need;
     }
 
-    // ── Mockup row ──
-    const mockupAreaH = 88;
+    // Estimate available header space: page minus header bar minus mockup
+    // (~70mm now) minus placement art block estimate minus footer.
+    const mockupAreaH = 70;   // reduced from 88 — tighter (v8r16)
+    const plArtEstimate = (() => {
+      // Rough estimate to budget header height. The actual rendering below
+      // measures more carefully.
+      if (!plArtData.length) return 0;
+      // Group by location to count rows
+      const locSet = new Set(plArtData.map(a => a.loc));
+      const groupCount = locSet.size;
+      // 1 row per group (we don't know how many cards wrap per group without
+      // doing the actual layout — assume 1 row per group as the typical case).
+      const cardRows = Math.max(groupCount, Math.ceil(plArtData.length / 4));
+      // Each row: card height (52) + group header (~6) + spacing
+      return 8 + cardRows * 56 + 4;
+    })();
+    const availHeaderH = (PH - M - FOOTER_RESERVED) - y - mockupAreaH - 5 - plArtEstimate - 4;
+
+    let scale = 1.0;
+    const trials = [1.0, 0.9, 0.8, 0.7, 0.6];
+    for (const s of trials) {
+      const needed = measureHeaderHeight(DEFAULT_BODY_PT*s, DEFAULT_LINE_MM*s, DEFAULT_GAP_MM*s);
+      if (needed <= Math.max(availHeaderH, 30)) { scale = s; break; }
+      scale = s;
+    }
+    const bodyPt = DEFAULT_BODY_PT * scale;
+    const labelPt = DEFAULT_LABEL_PT * scale;
+    const lineMm = DEFAULT_LINE_MM * scale;
+    const gapMm  = DEFAULT_GAP_MM  * scale;
+    const labelToBodyOffset = 4 * scale;
+
+    // Render header fields
+    for (let i = 0; i < headerFields.length; i += 2) {
+      const a = headerFields[i];
+      const b = headerFields[i+1];
+      pdf.setFont('helvetica', 'bold').setFontSize(labelPt).setTextColor(...C.green);
+      pdf.text(a[0].toUpperCase(), M, y);
+      if (b) pdf.text(b[0].toUpperCase(), M + colW, y);
+      pdf.setFont(a[2], 'normal').setFontSize(bodyPt).setTextColor(...C.darkTx);
+      const aLines = pdf.splitTextToSize(clean(a[1]), colW - 3);
+      pdf.text(aLines, M, y + labelToBodyOffset);
+      if (b) {
+        pdf.setFont(b[2], 'normal');
+        const bLines = pdf.splitTextToSize(clean(b[1]), colW - 3);
+        pdf.text(bLines, M + colW, y + labelToBodyOffset);
+      }
+      const rowH = Math.max(aLines.length, b ? pdf.splitTextToSize(clean(b[1]), colW - 3).length : 1);
+      y += labelToBodyOffset + rowH * lineMm + gapMm;
+    }
+
+    // Notes (full width, in header area)
+    if (notes) {
+      pdf.setFont('helvetica', 'bold').setFontSize(labelPt).setTextColor(...C.green);
+      pdf.text('NOTES', M, y);
+      pdf.setFont('helvetica', 'normal').setFontSize(bodyPt).setTextColor(...C.darkTx);
+      const noteLines = pdf.splitTextToSize(clean(notes), usableW);
+      pdf.text(noteLines, M, y + labelToBodyOffset);
+      y += labelToBodyOffset + noteLines.length * lineMm + gapMm;
+    }
+
+    // Separator below header block
+    if (headerFields.length || notes) {
+      pdf.setDrawColor(...C.border).setLineWidth(0.2);
+      pdf.line(M, y, PW - M, y);
+      y += 3;
+    }
+
+    // ── Mockup row (v8r16: tighter) ──
     pdf.setFillColor(...C.grayBg).rect(M, y, usableW, mockupAreaH, 'F');
     if (mockupData.length) {
-      const pad = 6;
+      const pad = 4;
       const gap = 4;
-      const labelH = 6;
+      const labelH = 5;
       const innerW = usableW - 2 * pad;
       const innerH = mockupAreaH - 2 * pad - labelH;
       const N = mockupData.length;
       const slotW = (innerW - gap * (N - 1)) / N;
 
       mockupData.forEach((m, i) => {
-        // Fit-to-box: scale so image fits within (slotW, innerH).
-        // Note: natural pixels treated as 1px = 0.264mm (96dpi). This gives
-        // small icons a sensible size and big logos fit-to-box.
-        // We just compute ratio to fit-to-box.
         const ratio = Math.min(slotW / m.natW, innerH / m.natH);
-        // Apply ratio but cap so very small images don't get blown up too much
         const w = m.natW * ratio;
         const h = m.natH * ratio;
         const slotX = M + pad + i * (slotW + gap);
         const imgX = slotX + (slotW - w) / 2;
         const imgY = y + pad + (innerH - h) / 2;
         try {
-          // 7th arg is alias (unused), 8th is compression mode for JPEG
           pdf.addImage(m.url, m.fmt, imgX, imgY, w, h, undefined, 'FAST');
         } catch (err) {
-          // Drawing failed (corrupt image or unsupported format) — placeholder
           pdf.setFillColor(220, 220, 218).rect(slotX, y + pad, slotW, innerH, 'F');
           pdf.setTextColor(...C.muted).setFontSize(8).setFont('helvetica', 'normal');
           pdf.text('(image failed to render)', slotX + slotW/2, y + pad + innerH/2, { align: 'center' });
         }
-        // Label below
         pdf.setFont('helvetica', 'normal').setFontSize(8).setTextColor(...C.green);
-        const lbl = clean((m.name || '').replace(/\.[^.]+$/, ''));
+        const lbl = clean(m.displayName || (m.name || '').replace(/\.[^.]+$/, ''));
         pdf.text(lbl, slotX + slotW/2, y + mockupAreaH - 2, {
           align: 'center', maxWidth: slotW
         });
@@ -1725,9 +1841,9 @@ async function generateProofBlob() {
       pdf.setFont('helvetica', 'normal').setFontSize(11).setTextColor(...C.muted);
       pdf.text('No mockup images', PW/2, y + mockupAreaH/2 + 2, { align: 'center' });
     }
-    y += mockupAreaH + 5;
+    y += mockupAreaH + 4;
 
-    // ── Placement art cards (v8r15: grouped by placement, each row centered) ──
+    // ── Placement art cards (v8r16: with inline placement specs above each group) ──
     if (plArtData.length) {
       pdf.setFont('helvetica', 'bold').setFontSize(8).setTextColor(...C.green);
       pdf.text('PRINT PLACEMENT ART', PW/2, y + 3, { align: 'center' });
@@ -1739,14 +1855,15 @@ async function generateProofBlob() {
       const cardsPerRow = Math.max(1, Math.floor((usableW + cardGap) / (cardW + cardGap)));
       const imgBoxH = 32;
 
-      // Group cards by placement location so each location's variants
-      // stay together. Then render each group as one or more rows of
-      // cards, centered.
+      // Group cards by placement location and find the matching placement
+      // object so we can render its specs inline with the group header.
       const groups = [];
       const groupMap = new Map();
       for (const a of plArtData) {
         if (!groupMap.has(a.loc)) {
-          const g = { loc: a.loc, cards: [] };
+          // Find the placement object for this location to pull specs from
+          const placement = placements.find(p => p.loc === a.loc);
+          const g = { loc: a.loc, cards: [], placement };
           groupMap.set(a.loc, g);
           groups.push(g);
         }
@@ -1754,17 +1871,35 @@ async function generateProofBlob() {
       }
 
       for (const g of groups) {
-        // Group header (location name) — centered, only if there are >1 groups
-        // OR there are variants (so user can tell which is which).
-        const showHeader = groups.length > 1 || g.cards.some(c => c.variantLabel);
-        if (showHeader) {
-          pdf.setFont('helvetica', 'bold').setFontSize(7).setTextColor(...C.green);
-          const headerText = g.cards.length > 1
-            ? g.loc + ' (' + g.cards.length + ' variants)'
-            : g.loc;
-          pdf.text(clean(headerText), PW/2, y + 2, { align: 'center' });
-          y += 4;
+        // v8r16: build the inline placement spec line
+        // Example: "Full Front (4 variants) · DTF · 7.75" W × 12" H · 2.5" from collar"
+        const headerParts = [];
+        const variantSuffix = g.cards.length > 1 ? ` (${g.cards.length} variants)` : '';
+        headerParts.push(g.loc + variantSuffix);
+        if (g.placement) {
+          if (g.placement.method) headerParts.push(g.placement.method);
+          // Size
+          if (g.placement.w && g.placement.h) headerParts.push(`${g.placement.w}" W \u00d7 ${g.placement.h}" H`);
+          else if (g.placement.w) headerParts.push(`${g.placement.w}" W`);
+          else if (g.placement.h) headerParts.push(`${g.placement.h}" H`);
+          // Collar / center
+          if (g.placement.collar) headerParts.push(`${g.placement.collar}" from collar`);
+          if (g.placement.center) headerParts.push(`${g.placement.center}" from center`);
+          // Colors
+          if (g.placement.colors) headerParts.push(g.placement.colors);
+          // Description (truncated if long — full description was in NOTES if needed)
+          if (g.placement.desc) headerParts.push(g.placement.desc);
         }
+        // Use middle dot as divider (clean, unambiguous, won't clash with hyphens)
+        const headerText = headerParts.join(' \u00b7 ');
+
+        pdf.setFont('helvetica', 'bold').setFontSize(8).setTextColor(...C.green);
+        // Wrap if too long for one line
+        const headerLines = pdf.splitTextToSize(clean(headerText), usableW);
+        headerLines.forEach((line, li) => {
+          pdf.text(line, PW/2, y + 3 + li*3.5, { align: 'center' });
+        });
+        y += headerLines.length * 3.5 + 1;
 
         // Walk the group's cards in rows of cardsPerRow, centering each row
         const groupCards = g.cards;
@@ -1777,43 +1912,31 @@ async function generateProofBlob() {
             const cardX = rowStartX + j * (cardW + cardGap);
             const cardY = y;
 
-            // Card frame (white with thin border)
+            // Card frame
             pdf.setDrawColor(...C.border).setFillColor(255, 255, 255).setLineWidth(0.2);
             pdf.rect(cardX, cardY, cardW, cardH, 'FD');
 
-            // Gray image area (so white artwork is visible)
+            // Gray image area
             const imgPadX = 2;
             const imgPadY = 2;
             const innerImgW = cardW - 2 * imgPadX;
             pdf.setFillColor(...C.grayBg);
             pdf.rect(cardX + imgPadX, cardY + imgPadY, innerImgW, imgBoxH, 'F');
 
-            // Image (or extension placeholder)
             if (a.url) {
               const ratio = Math.min(innerImgW / a.natW, imgBoxH / a.natH);
               const w = a.natW * ratio;
               const h = a.natH * ratio;
               try {
                 pdf.addImage(a.url, a.fmt, cardX + (cardW - w)/2, cardY + imgPadY + (imgBoxH - h)/2, w, h, undefined, 'FAST');
-              } catch (err) {
-                // gray rect already there as the fallback look
-              }
+              } catch (err) {}
             } else {
               pdf.setFont('helvetica', 'bold').setFontSize(11).setTextColor(...C.muted);
               pdf.text(a.ext, cardX + cardW/2, cardY + imgPadY + imgBoxH/2 + 1, { align: 'center' });
             }
 
-            // Variant label (if any) — placement name already in group header
-            // when there's >1 placement, but include placement name here too
-            // when this is the only placement (no header shown above)
+            // Variant label (only — placement name already in group header)
             let nextY = cardY + imgBoxH + 5;
-            if (!showHeader) {
-              pdf.setFont('helvetica', 'bold').setFontSize(7).setTextColor(...C.green);
-              pdf.text(clean(a.loc), cardX + cardW/2, nextY, {
-                align: 'center', maxWidth: cardW - 2
-              });
-              nextY += 4;
-            }
             if (a.variantLabel) {
               pdf.setFont('helvetica', 'italic').setFontSize(6).setTextColor(...C.muted);
               pdf.text(clean(a.variantLabel), cardX + cardW/2, nextY, {
@@ -1834,140 +1957,6 @@ async function generateProofBlob() {
       y += 1;
     }
 
-    // ── Details section ──
-    const baseFields = [
-      customer && ['Customer', customer, 'helvetica'],
-      artwork  && ['Artwork', artwork, 'helvetica'],
-      artNum   && ['Art Number', artNum, 'courier'],
-      job      && ['Order/Job #', job, 'helvetica'],
-      garment  && ['Garment', garment, 'helvetica'],
-      dropbox  && ['Dropbox', dropbox, 'courier'],
-    ].filter(Boolean);
-
-    if (baseFields.length || placements.length || notes) {
-      pdf.setDrawColor(...C.border).setLineWidth(0.2);
-      pdf.line(M, y, PW - M, y);
-      y += 4;
-    }
-
-    // ── v8r15: dynamic font scaling so details fit between y and the footer ──
-    // The footer occupies the bottom M (12mm) of the page plus a few mm of
-    // separator. Compute available vertical space, measure required space at
-    // default font sizes, and scale down (down to ~60%) if needed.
-    const FOOTER_RESERVED = 8;          // mm reserved for footer line + text
-    const availH = (PH - M - FOOTER_RESERVED) - y;
-    const DEFAULT_LABEL_PT = 7;
-    const DEFAULT_BODY_PT  = 10;
-    const DEFAULT_LINE_MM  = 4;          // body line height in mm
-    const DEFAULT_GAP_MM   = 3;          // gap between rows
-    const colW = usableW / 2;
-
-    // Measure required height at default sizes
-    function measureDetailsHeight(bodyPt, lineMm, gapMm) {
-      // proportionally scaled line metrics for the trial
-      const labelMm = bodyPt * 0.42;     // label baseline offset
-      let need = 0;
-      // baseFields rows (two columns)
-      pdf.setFontSize(bodyPt);
-      for (let i = 0; i < baseFields.length; i += 2) {
-        const a = baseFields[i];
-        const b = baseFields[i+1];
-        const aLines = pdf.splitTextToSize(clean(a[1]), colW - 3).length;
-        const bLines = b ? pdf.splitTextToSize(clean(b[1]), colW - 3).length : 0;
-        const rowH = Math.max(aLines, bLines || 1);
-        need += labelMm + rowH * lineMm + gapMm;
-      }
-      // placement rows (full width)
-      for (const p of placements) {
-        const detailParts = [
-          (p.w && p.h) ? `${p.w}" W x ${p.h}" H` : (p.w ? `${p.w}" W` : (p.h ? `${p.h}" H` : '')),
-          p.collar ? `${p.collar}" from collar` : '',
-          p.center ? `${p.center}" from center` : '',
-          p.method, p.colors, p.desc,
-        ].filter(Boolean);
-        const detail = clean(detailParts.join(' / '));
-        const lines = pdf.splitTextToSize(detail, usableW).length;
-        need += labelMm + lines * lineMm + gapMm;
-      }
-      // notes (full width)
-      if (notes) {
-        const lines = pdf.splitTextToSize(clean(notes), usableW).length;
-        need += labelMm + lines * lineMm + gapMm;
-      }
-      return need;
-    }
-
-    // Find largest scale that fits. Try 100%, 90%, 80%, 70%, 60% in turn.
-    // 60% on a 10pt body = 6pt — still legible. If even 60% doesn't fit,
-    // we use 60% anyway (the alternative would be paging, which you said
-    // to skip for now).
-    let scale = 1.0;
-    const trials = [1.0, 0.9, 0.8, 0.7, 0.6];
-    for (const s of trials) {
-      const trialBody = DEFAULT_BODY_PT * s;
-      const trialLine = DEFAULT_LINE_MM * s;
-      const trialGap  = DEFAULT_GAP_MM  * s;
-      const needed = measureDetailsHeight(trialBody, trialLine, trialGap);
-      if (needed <= availH) { scale = s; break; }
-      scale = s;  // keep last scale in case nothing fits
-    }
-
-    // Now render with the chosen scale
-    const bodyPt = DEFAULT_BODY_PT * scale;
-    const labelPt = DEFAULT_LABEL_PT * scale;
-    const lineMm = DEFAULT_LINE_MM * scale;
-    const gapMm  = DEFAULT_GAP_MM  * scale;
-    // Label baseline sits ~ labelPt * 0.5 below the y-origin of the label row.
-    // We previously used hard-coded +4 for body offset; scale that too.
-    const labelToBodyOffset = 4 * scale;
-
-    if (baseFields.length) {
-      for (let i = 0; i < baseFields.length; i += 2) {
-        const a = baseFields[i];
-        const b = baseFields[i+1];
-        pdf.setFont('helvetica', 'bold').setFontSize(labelPt).setTextColor(...C.green);
-        pdf.text(a[0].toUpperCase(), M, y);
-        if (b) pdf.text(b[0].toUpperCase(), M + colW, y);
-        pdf.setFont(a[2], 'normal').setFontSize(bodyPt).setTextColor(...C.darkTx);
-        const aLines = pdf.splitTextToSize(clean(a[1]), colW - 3);
-        pdf.text(aLines, M, y + labelToBodyOffset);
-        if (b) {
-          pdf.setFont(b[2], 'normal');
-          const bLines = pdf.splitTextToSize(clean(b[1]), colW - 3);
-          pdf.text(bLines, M + colW, y + labelToBodyOffset);
-        }
-        const rowH = Math.max(aLines.length, b ? pdf.splitTextToSize(clean(b[1]), colW - 3).length : 1);
-        y += labelToBodyOffset + rowH * lineMm + gapMm;
-      }
-    }
-
-    // Placement details (one row per placement, full width)
-    placements.forEach((p, i) => {
-      pdf.setFont('helvetica', 'bold').setFontSize(labelPt).setTextColor(...C.green);
-      pdf.text(`PLACEMENT ${i+1} - ${p.loc.toUpperCase()}`, M, y);
-      const detailParts = [
-        (p.w && p.h) ? `${p.w}" W x ${p.h}" H` : (p.w ? `${p.w}" W` : (p.h ? `${p.h}" H` : '')),
-        p.collar ? `${p.collar}" from collar` : '',
-        p.center ? `${p.center}" from center` : '',
-        p.method, p.colors, p.desc,
-      ].filter(Boolean);
-      pdf.setFont('helvetica', 'normal').setFontSize(bodyPt).setTextColor(...C.darkTx);
-      const detail = clean(detailParts.join(' / '));
-      const lines = pdf.splitTextToSize(detail, usableW);
-      pdf.text(lines, M, y + labelToBodyOffset);
-      y += labelToBodyOffset + lines.length * lineMm + gapMm;
-    });
-
-    // Notes (wrap to width)
-    if (notes) {
-      pdf.setFont('helvetica', 'bold').setFontSize(labelPt).setTextColor(...C.green);
-      pdf.text('NOTES', M, y);
-      pdf.setFont('helvetica', 'normal').setFontSize(bodyPt).setTextColor(...C.darkTx);
-      const noteLines = pdf.splitTextToSize(clean(notes), usableW);
-      pdf.text(noteLines, M, y + labelToBodyOffset);
-      y += labelToBodyOffset + noteLines.length * lineMm + gapMm;
-    }
-
     // ── Footer (always at bottom of page) ──
     const footerY = PH - M;
     pdf.setDrawColor(...C.border).setLineWidth(0.2);
@@ -1975,7 +1964,6 @@ async function generateProofBlob() {
     pdf.setFont('helvetica', 'normal').setFontSize(8).setTextColor(...C.muted);
     const footerL = ['Mirror Image', customer, artwork].filter(Boolean).join(' - ');
     pdf.text(clean(footerL), M, footerY - 1);
-    // v8r15: footer right side = "YYYY-MM-DD HH:MM TZ vX.Y"
     pdf.text(buildFooterStamp(), PW - M, footerY - 1, { align: 'right' });
 
     const blob = pdf.output('blob');
