@@ -157,6 +157,10 @@
   }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<!-- jsPDF loaded separately for v8r7's direct-render PDF approach. The html2pdf
+     bundle uses jsPDF internally but doesn't expose it on the global namespace.
+     This script puts the jsPDF constructor at window.jspdf.jsPDF. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -170,7 +174,7 @@
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:16px">
-    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v8r6</span></span>
+    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v8r7</span></span>
     <div class="db-status" id="dbStatus">
       <div class="db-dot checking" id="dbDot"></div>
       <span id="dbLabel">Checking DB…</span>
@@ -1151,9 +1155,20 @@ async function generateProofBlob() {
   //             No html2canvas in the loop at all. The PDF gets crisp
   //             vector text and the layout is 100% deterministic.
 
-  // jsPDF is bundled inside html2pdf.bundle.min.js and exposed at window.jspdf.jsPDF
-  const jsPDFCtor = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
-  if (!jsPDFCtor) throw new Error('jsPDF library not loaded - try refreshing the page');
+  // jsPDF can live in a couple of places depending on which CDN script
+  // exposed it. v8r7 added a dedicated jsPDF CDN script tag because the
+  // html2pdf 0.10.1 bundle doesn't expose its internal jsPDF on the global
+  // namespace. We try every known global path.
+  const jsPDFCtor =
+       (window.jspdf && window.jspdf.jsPDF)    // jsPDF 2.x UMD build
+    || window.jsPDF                              // jsPDF 1.x style
+    || (window.jspdf && typeof window.jspdf === 'function' ? window.jspdf : null);
+  if (!jsPDFCtor) {
+    throw new Error(
+      'jsPDF library failed to load. Check your network connection and refresh. ' +
+      '(window.jspdf=' + typeof window.jspdf + ', window.jsPDF=' + typeof window.jsPDF + ')'
+    );
+  }
 
   // ── Gather form data ──
   const customer = document.getElementById('customerName').value || '';
