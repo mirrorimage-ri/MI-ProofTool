@@ -174,7 +174,7 @@
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:16px">
-    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v8r12</span></span>
+    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v8r13</span></span>
     <div class="db-status" id="dbStatus">
       <div class="db-dot checking" id="dbDot"></div>
       <span id="dbLabel">Checking DB…</span>
@@ -214,7 +214,7 @@
       <div class="field" style="display:flex;align-items:flex-end;gap:8px">
         <div style="flex:1">
           <label>Art Number <span id="artNumStatus" style="font-weight:400;font-size:11px;color:#6A994E"></span></label>
-          <input type="text" id="artNumber" style="background:#fff;font-family:var(--mono);font-weight:600;color:#386641;letter-spacing:.02em" placeholder="Auto-generated on Generate Proof">
+          <input type="text" id="artNumber" oninput="this.dataset.userEdited='true'" style="background:#fff;font-family:var(--mono);font-weight:600;color:#386641;letter-spacing:.02em" placeholder="Auto-generated on Generate Proof">
         </div>
         <button type="button" class="btn btn-secondary" onclick="previewArtNumber()" style="flex-shrink:0;white-space:nowrap;margin-bottom:0">Preview</button>
       </div>
@@ -344,17 +344,31 @@
       </div>
     </div>
     <div class="pl-art-section" style="border-top:1px solid #EDEDEB;padding-top:10px;margin-top:4px">
-      <label style="font-size:12px;font-weight:500;color:#1a1a18;display:block;margin-bottom:4px">
-        Art File <span class="pl-art-suffix-label" style="font-family:monospace;color:#6A994E;font-size:11px"></span>
-      </label>
-      <div class="pl-art-drop" style="border:2px dashed #D3D1C7;border-radius:8px;padding:10px;text-align:center;cursor:pointer;background:#F8F8F6;position:relative;transition:all .15s">
-        <input type="file" class="pl-art-input" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%">
-        <span style="font-size:12px;color:#888780">Drop art file or <strong style="color:#0061fe">browse</strong></span>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+        <label style="font-size:12px;font-weight:500;color:#1a1a18">
+          Art Files <span class="pl-art-suffix-label" style="font-family:monospace;color:#6A994E;font-size:11px"></span>
+        </label>
+        <button type="button" class="pl-add-variant" style="background:none;border:1px solid #6A994E;color:#386641;font-size:11px;padding:3px 10px;border-radius:14px;cursor:pointer;font-weight:500">+ Add Variant</button>
       </div>
-      <div class="pl-art-chip" style="display:none;margin-top:6px"></div>
+      <div class="pl-variants"></div>
     </div>
   </div>
 </template>
+
+<!-- Template for a single variant inside a placement -->
+<template id="plVariantTpl">
+  <div class="pl-variant" style="display:flex;gap:8px;align-items:flex-start;padding:8px;border:1px solid #EDEDEB;border-radius:6px;margin-bottom:6px;background:#F8F8F6">
+    <div class="pl-variant-thumb" style="flex-shrink:0;width:56px;height:56px;background:#E8E8E6;border-radius:4px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative">
+      <input type="file" class="pl-variant-input" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%" title="Drop or click to upload">
+      <div class="pl-variant-placeholder" style="font-size:9px;color:#888780;text-align:center;padding:4px">drop or click</div>
+      <img class="pl-variant-thumb-img" style="display:none;max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain"/>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column;gap:4px;min-width:0">
+      <input type="text" class="pl-variant-label" placeholder="Variant label (e.g. light shirt, color)" style="width:100%;padding:4px 8px;border:1px solid #EDEDEB;border-radius:4px;font-size:12px;background:#fff">
+      <div class="pl-variant-chip" style="font-family:monospace;font-size:10px;color:#0061fe;word-break:break-all;line-height:1.3;min-height:13px">—</div>
+    </div>
+    <button type="button" class="pl-variant-rm" style="flex-shrink:0;background:none;border:none;color:#BC4749;font-size:18px;cursor:pointer;padding:0 4px;line-height:1" title="Remove this variant">&times;</button>
+  </div>
 
 <script>
 const SUPABASE_URL = "https://upyohtshvvdmbubuionh.supabase.co";
@@ -439,54 +453,159 @@ function addPlacement() {
   const sl = entry.querySelector('.pl-art-suffix-label');
   if (sl) sl.textContent = '— filename will end with -' + firstSuffix;
   document.getElementById('plEntries').appendChild(clone);
-  // Wire up drag/drop on the newly added entry
+  // Wire up the new entry
   const added = document.getElementById('plEntries').lastElementChild;
-  wirePlArtDrop(added);
+  added._artVariants = [];                  // [{file, label}, ...]
+  // Wire up + Add Variant button
+  added.querySelector('.pl-add-variant').addEventListener('click', () => addVariant(added));
+  // Start with one variant row by default (user can add more)
+  addVariant(added);
 }
 
-function wirePlArtDrop(entry) {
-  const drop = entry.querySelector('.pl-art-drop');
-  const input = entry.querySelector('.pl-art-input');
-  drop.addEventListener('dragover', e => { e.preventDefault(); drop.style.borderColor='#0061fe'; drop.style.background='#f0f4ff'; });
-  drop.addEventListener('dragleave', () => { drop.style.borderColor='#D3D1C7'; drop.style.background='#F8F8F6'; });
-  drop.addEventListener('drop', e => {
-    e.preventDefault(); drop.style.borderColor='#D3D1C7'; drop.style.background='#F8F8F6';
-    if (e.dataTransfer.files[0]) setPlArtFile(entry, e.dataTransfer.files[0]);
+// ── Variant management (v8r13) ──
+// Each placement has 1+ "variants" — alternative art files for the same
+// placement (e.g. light/dark shirt versions, color/B&W versions). Each
+// variant carries: a File object, a custom text label, and a thumbnail.
+// File naming includes the label suffix when there are 2+ variants.
+
+function addVariant(plEntry) {
+  const tpl = document.getElementById('plVariantTpl');
+  const node = tpl.content.cloneNode(true);
+  const variant = node.querySelector('.pl-variant');
+  const idx = plEntry._artVariants.length;
+  // Track in data
+  plEntry._artVariants.push({ file: null, label: '' });
+
+  // Wire up file input (handles both click-to-select and drag-and-drop)
+  const fileInput = variant.querySelector('.pl-variant-input');
+  fileInput.addEventListener('change', e => {
+    if (e.target.files && e.target.files[0]) setVariantFile(plEntry, variant, e.target.files[0]);
   });
-  input.addEventListener('change', e => { if (e.target.files[0]) setPlArtFile(entry, e.target.files[0]); });
-}
+  // Drag and drop on the thumbnail area
+  const thumbBox = variant.querySelector('.pl-variant-thumb');
+  thumbBox.addEventListener('dragover', e => { e.preventDefault(); thumbBox.style.outline = '2px dashed #0061fe'; });
+  thumbBox.addEventListener('dragleave', () => { thumbBox.style.outline = 'none'; });
+  thumbBox.addEventListener('drop', e => {
+    e.preventDefault(); thumbBox.style.outline = 'none';
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) setVariantFile(plEntry, variant, e.dataTransfer.files[0]);
+  });
 
-function setPlArtFile(entry, file) {
-  entry._artFile = file;
-  updatePlArtChip(entry);
+  // Label input updates filename chip on every keystroke
+  const labelInput = variant.querySelector('.pl-variant-label');
+  labelInput.addEventListener('input', () => {
+    const i = Array.from(plEntry.querySelectorAll('.pl-variant')).indexOf(variant);
+    if (i >= 0 && plEntry._artVariants[i]) {
+      plEntry._artVariants[i].label = labelInput.value;
+    }
+    updateVariantChips(plEntry);
+  });
+
+  // Remove button — but don't allow removing the last variant
+  variant.querySelector('.pl-variant-rm').addEventListener('click', () => removeVariant(plEntry, variant));
+
+  plEntry.querySelector('.pl-variants').appendChild(node);
+  updateVariantChips(plEntry);
   updateDbxUI();
 }
 
-function updatePlArtChip(entry) {
-  const chip = entry.querySelector('.pl-art-chip');
-  if (!chip) return;
-  if (entry._artFile) {
-    const artNum  = document.getElementById('artNumber').value || 'ARTNUM';
-    const locVal  = entry.querySelector('.pl-loc').value;
-    const suffix  = PLACEMENT_SUFFIX[locVal] || locVal.toUpperCase();
-    const ext     = entry._artFile.name.split('.').pop();
-    const proposed = artNum + '-' + suffix + '.' + ext;
-    chip.style.display = 'block';
-    chip.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:#e8f0fe;border:1px solid #0061fe;border-radius:20px;font-size:11px;color:#0061fe;font-family:monospace">'
-      + proposed
-      + ' <button style="background:none;border:none;color:#0061fe;cursor:pointer;font-size:13px;padding:0;line-height:1" onclick="clearPlArtFile(this)">&times;</button></span>';
-  } else {
-    chip.style.display = 'none';
-    chip.innerHTML = '';
+function removeVariant(plEntry, variantEl) {
+  const all = Array.from(plEntry.querySelectorAll('.pl-variant'));
+  if (all.length <= 1) {
+    // Last variant — don't remove, just clear it
+    const idx = all.indexOf(variantEl);
+    if (idx >= 0 && plEntry._artVariants[idx]) {
+      plEntry._artVariants[idx] = { file: null, label: '' };
+    }
+    variantEl.querySelector('.pl-variant-input').value = '';
+    variantEl.querySelector('.pl-variant-label').value = '';
+    variantEl.querySelector('.pl-variant-thumb-img').style.display = 'none';
+    variantEl.querySelector('.pl-variant-thumb-img').src = '';
+    variantEl.querySelector('.pl-variant-placeholder').style.display = '';
+    updateVariantChips(plEntry);
+    updateDbxUI();
+    return;
   }
+  const idx = all.indexOf(variantEl);
+  if (idx >= 0) plEntry._artVariants.splice(idx, 1);
+  variantEl.remove();
+  updateVariantChips(plEntry);
+  updateDbxUI();
 }
 
-function clearPlArtFile(btn) {
-  const entry = btn.closest('.pl-entry');
-  entry._artFile = null;
-  entry.querySelector('.pl-art-input').value = '';
-  updatePlArtChip(entry);
+function setVariantFile(plEntry, variantEl, file) {
+  const all = Array.from(plEntry.querySelectorAll('.pl-variant'));
+  const idx = all.indexOf(variantEl);
+  if (idx < 0) return;
+  plEntry._artVariants[idx].file = file;
+  // Show thumbnail
+  const img = variantEl.querySelector('.pl-variant-thumb-img');
+  const placeholder = variantEl.querySelector('.pl-variant-placeholder');
+  if (file.type && file.type.startsWith('image/')) {
+    const r = new FileReader();
+    r.onload = ev => {
+      img.src = ev.target.result;
+      img.style.display = 'block';
+      placeholder.style.display = 'none';
+    };
+    r.readAsDataURL(file);
+  } else {
+    // Non-image — show file extension as placeholder
+    img.style.display = 'none';
+    placeholder.style.display = '';
+    placeholder.textContent = (file.name.split('.').pop() || 'FILE').toUpperCase();
+  }
+  updateVariantChips(plEntry);
   updateDbxUI();
+}
+
+// Sanitize a variant label for use in a filename: keep alphanumeric,
+// underscores, hyphens. Replace spaces with underscores. Cap at 30 chars.
+function sanitizeVariantLabel(label) {
+  if (!label) return '';
+  return label.trim()
+    .replace(/\s+/g, '_')
+    .replace(/[^A-Za-z0-9_-]/g, '')
+    .slice(0, 30);
+}
+
+// Build the filename for a given variant. When a placement has only 1 variant
+// AND the label is empty, omit the label suffix (clean filename like before).
+// Otherwise, suffix with the sanitized label or "v{N}" as fallback.
+function buildVariantFilename(artNum, locSuffix, label, ext, variantIdx, totalVariants) {
+  let suffix = '';
+  const sanitized = sanitizeVariantLabel(label);
+  if (totalVariants <= 1 && !sanitized) {
+    // Single unlabeled variant — clean filename
+    suffix = '';
+  } else if (sanitized) {
+    suffix = '-' + sanitized;
+  } else {
+    // Multiple variants with no label — auto-number
+    suffix = '-v' + (variantIdx + 1);
+  }
+  return (artNum || 'ARTNUM') + '-' + locSuffix + suffix + '.' + ext;
+}
+
+// Refresh every variant's filename chip in a placement
+function updateVariantChips(plEntry) {
+  const artNum = document.getElementById('artNumber').value || 'ARTNUM';
+  const locVal = plEntry.querySelector('.pl-loc').value;
+  const locSuffix = PLACEMENT_SUFFIX[locVal] || locVal.toUpperCase();
+  const variantEls = Array.from(plEntry.querySelectorAll('.pl-variant'));
+  const total = variantEls.length;
+  variantEls.forEach((vEl, i) => {
+    const data = plEntry._artVariants[i] || { file: null, label: '' };
+    const chip = vEl.querySelector('.pl-variant-chip');
+    if (!data.file) {
+      chip.textContent = '—';
+      chip.style.color = '#888780';
+      return;
+    }
+    const ext = data.file.name.split('.').pop();
+    const fname = buildVariantFilename(artNum, locSuffix, data.label, ext, i, total);
+    chip.textContent = fname;
+    chip.style.color = '#0061fe';
+  });
 }
 
 function removePl(btn) { btn.closest('.pl-entry').remove(); }
@@ -501,7 +620,7 @@ function onLocChange(sel) {
   if (artSuffixLabel) {
     artSuffixLabel.textContent = '— filename will end with -' + suffix;
   }
-  updatePlArtChip(e);
+  updateVariantChips(e);
 }
 
 function gatherPl() {
@@ -531,31 +650,23 @@ async function generateProof() {
   const notes    = document.getElementById('notes').value;
   const pls      = gatherPl();
 
-  // Claim art number from Supabase (only once per proof)
+  // v8r13: Generate Proof now only PREVIEWS the art number, it doesn't commit.
+  // The number is only committed (counter incremented + DB row saved) at upload
+  // time, after the match-check has determined whether this is a new entry or
+  // an update to an existing one.
   const artField  = document.getElementById('artNumber');
   const artStatus = document.getElementById('artNumStatus');
-  const alreadyClaimed = artField.dataset.claimed === 'true';
 
-  if (!alreadyClaimed) {
-    artStatus.textContent = 'Saving…';
-    artStatus.style.color = '#6A994E';
+  // If user hasn't manually overridden the art number, fetch a preview from DB
+  if (!artField.dataset.userEdited) {
     try {
-      const claimed = await claimAndSaveArtNumber({
-        customer_name: customer, artwork_name: artwork,
-        job_number: job, garment, dropbox_link: dropbox, notes,
-        placements: pls
-      });
-      artField.value = claimed;
-      artField.style.color = '#386641';
-      artField.dataset.claimed = 'true';
-      artStatus.textContent = '✓ Saved';
-      artStatus.style.color = '#6A994E';
-      document.querySelectorAll('.pl-entry').forEach(e => updatePlArtChip(e));
-    } catch(err) {
+      await previewArtNumber();  // sets field.value to the next-available number
+    } catch (err) {
       artStatus.textContent = '⚠ ' + err.message;
       artStatus.style.color = '#BC4749';
     }
   }
+  document.querySelectorAll('.pl-entry').forEach(e => updateVariantChips(e));
   // Read art number from field (works whether just claimed or previously set)
   const artNum = artField.value;
   let dateStr='';
@@ -591,53 +702,84 @@ async function generateProof() {
       '<div class="proof-mockup-lbl">'+f.name.replace(/\.[^.]+$/,'')+'</div></div>'
     ).join('');
   } else { mx.innerHTML='<div style="color:#6A994E;font-size:13px;padding:3rem 0">No mockup images uploaded.</div>'; }
-  // Show placement art as image thumbnails (or file-type placeholder for non-images)
+  // Show placement art as image thumbnails — grouped by placement when there
+  // are multiple variants per placement (v8r13).
   const plArtSection = document.getElementById('proofPlacementArt');
   if (plArtSection) {
-    const artEntries = Array.from(document.querySelectorAll('.pl-entry')).filter(e=>e._artFile);
-    if (artEntries.length) {
-      plArtSection.style.display='block';
-      plArtSection.style.padding='14px 16px';
+    // Collect all variants across all placements
+    const allEntries = Array.from(document.querySelectorAll('.pl-entry'));
+    const groups = []; // [{ loc, locSuffix, variants: [{file, label, idx, total}] }]
+    for (const e of allEntries) {
+      const variants = (e._artVariants || []).filter(v => v.file);
+      if (!variants.length) continue;
+      const locVal = e.querySelector('.pl-loc').value;
+      const locTxt = e.querySelector('.pl-loc').options[e.querySelector('.pl-loc').selectedIndex].text;
+      const locSuffix = PLACEMENT_SUFFIX[locVal] || locVal.toUpperCase();
+      // Index variants from full array (for filename numbering) but only include ones with files
+      const allVariants = (e._artVariants || []);
+      const total = allVariants.filter(v => v.file).length;
+      const variantData = [];
+      let activeIdx = 0;
+      for (let i = 0; i < allVariants.length; i++) {
+        if (!allVariants[i].file) continue;
+        variantData.push({
+          file: allVariants[i].file,
+          label: allVariants[i].label,
+          idx: activeIdx,
+          total: total,
+        });
+        activeIdx++;
+      }
+      groups.push({ loc: locTxt, locSuffix, variants: variantData });
+    }
 
-      // Read each art file to a data URL (for image previews); non-image files
-      // get a placeholder with the extension. Done in parallel.
-      const artData = await Promise.all(artEntries.map(async e => {
-        const file = e._artFile;
-        const locVal = e.querySelector('.pl-loc').value;
-        const locTxt = e.querySelector('.pl-loc').options[e.querySelector('.pl-loc').selectedIndex].text;
-        const sfx = PLACEMENT_SUFFIX[locVal] || locVal.toUpperCase();
-        const artNum2 = document.getElementById('artNumber').value || 'ART';
-        const ext = file.name.split('.').pop();
-        const fname = artNum2 + '-' + sfx + '.' + ext;
-        let url = null;
-        if (file.type && file.type.startsWith('image/')) {
-          url = await new Promise(res => {
-            const r = new FileReader();
-            r.onload = ev => res(ev.target.result);
-            r.onerror = () => res(null);
-            r.readAsDataURL(file);
-          });
-        }
-        return { url, fname, loc: locTxt, ext };
+    if (groups.length) {
+      plArtSection.style.display = 'block';
+      plArtSection.style.padding = '14px 16px';
+
+      // Build groups, reading each variant's file to a data URL
+      const artNum2 = document.getElementById('artNumber').value || 'ART';
+      const groupHtmls = await Promise.all(groups.map(async g => {
+        const variantHtmls = await Promise.all(g.variants.map(async v => {
+          const ext = v.file.name.split('.').pop();
+          const fname = buildVariantFilename(artNum2, g.locSuffix, v.label, ext, v.idx, v.total);
+          let url = null;
+          if (v.file.type && v.file.type.startsWith('image/')) {
+            url = await new Promise(res => {
+              const r = new FileReader();
+              r.onload = ev => res(ev.target.result);
+              r.onerror = () => res(null);
+              r.readAsDataURL(v.file);
+            });
+          }
+          const lblTag = v.label
+            ? `<div style="font-size:9px;color:#888780;font-style:italic;text-align:center;margin-top:2px">${v.label}</div>`
+            : '';
+          return `
+            <div style="border:1px solid #EDEDEB;border-radius:6px;padding:8px;background:#fff;display:flex;flex-direction:column;align-items:center;gap:4px;width:140px">
+              <div style="width:120px;height:120px;background:#E8E8E6;border-radius:4px;display:flex;align-items:center;justify-content:center;overflow:hidden">
+                ${url
+                  ? `<img src="${url}" alt="${fname}" style="max-width:120px;max-height:120px;width:auto;height:auto;object-fit:contain;display:block"/>`
+                  : `<span style="font-size:14px;color:#888780;font-weight:600">${(ext||'FILE').toUpperCase()}</span>`
+                }
+              </div>
+              ${lblTag}
+              <div style="font-size:9px;color:#0061fe;font-family:monospace;word-break:break-all;text-align:center;line-height:1.3">${fname}</div>
+            </div>
+          `;
+        }));
+        const groupHeader = g.variants.length > 1
+          ? `<div style="font-size:10px;font-weight:600;color:#386641;margin-bottom:6px">${g.loc} <span style="color:#888780;font-weight:400">(${g.variants.length} variants)</span></div>`
+          : `<div style="font-size:10px;font-weight:600;color:#386641;margin-bottom:6px">${g.loc}</div>`;
+        return `<div style="margin-bottom:12px">${groupHeader}<div style="display:flex;gap:10px;flex-wrap:wrap">${variantHtmls.join('')}</div></div>`;
       }));
 
       plArtSection.innerHTML =
         '<div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#386641;margin-bottom:10px">Print Placement Art</div>' +
-        '<div style="display:flex;gap:12px;flex-wrap:wrap">' +
-        artData.map(a => `
-          <div style="border:1px solid #EDEDEB;border-radius:6px;padding:8px;background:#fff;display:flex;flex-direction:column;align-items:center;gap:6px;width:140px">
-            <div style="width:120px;height:120px;background:#E8E8E6;border-radius:4px;display:flex;align-items:center;justify-content:center;overflow:hidden">
-              ${a.url
-                ? `<img src="${a.url}" alt="${a.fname}" style="max-width:120px;max-height:120px;width:auto;height:auto;object-fit:contain;display:block"/>`
-                : `<span style="font-size:14px;color:#888780;font-weight:600">${(a.ext||'FILE').toUpperCase()}</span>`
-              }
-            </div>
-            <div style="font-size:10px;color:#386641;font-weight:600;text-align:center">${a.loc}</div>
-            <div style="font-size:9px;color:#0061fe;font-family:monospace;word-break:break-all;text-align:center;line-height:1.3">${a.fname}</div>
-          </div>
-        `).join('') +
-        '</div>';
-    } else { plArtSection.style.display='none'; }
+        groupHtmls.join('');
+    } else {
+      plArtSection.style.display = 'none';
+    }
   }
 
   const dt=document.getElementById('proofDetails');
@@ -692,6 +834,8 @@ let _pendingBlob     = null;
 let _pendingArtNum   = '';
 let _pendingFolder   = '';
 let _pendingArtFiles = [];
+let _pendingMode     = 'new';   // 'new' or 'update' (v8r13)
+let _pendingMatchRow = null;    // existing proof row when mode === 'update'
 
 
 
@@ -730,7 +874,7 @@ function updateDbxUI() {
     btn.className = 'dbx-connect-btn';
     label.style.display = 'none';
   }
-  const hasAnyArt = Array.from(document.querySelectorAll('.pl-entry')).some(e => e._artFile);
+  const hasAnyArt = Array.from(document.querySelectorAll('.pl-entry')).some(e => (e._artVariants || []).some(v => v.file));
   upBtn.disabled = !(dbxToken && hasAnyArt);
 }
 
@@ -776,55 +920,160 @@ async function dbxGetOrCreateLink(path) {
 async function uploadToDropbox() {
   if (!dbxToken) { alert("Connect Dropbox first."); return; }
   const missing = [];
-  if (!document.getElementById("customerName").value.trim()) missing.push("Customer Name");
-  if (!document.getElementById("artworkName").value.trim())  missing.push("Artwork Name");
-  const artNum = document.getElementById("artNumber").value.trim();
-  if (!artNum) missing.push("Art Number (click Generate Proof first)");
+  const customer = document.getElementById("customerName").value.trim();
+  const artwork  = document.getElementById("artworkName").value.trim();
+  if (!customer) missing.push("Customer Name");
+  if (!artwork)  missing.push("Artwork Name");
+  const artNumField = document.getElementById("artNumber").value.trim();
+  if (!artNumField) missing.push("Art Number (click Generate Proof first)");
   const plEntries = Array.from(document.querySelectorAll(".pl-entry"));
   if (!plEntries.length) missing.push("At least one Print Placement");
-  const missingArt = plEntries.filter(e => !e._artFile);
+  const missingArt = plEntries.filter(e => !(e._artVariants || []).some(v => v.file));
   if (plEntries.length && missingArt.length) {
     missing.push("Art file for: " + missingArt.map(e =>
       e.querySelector(".pl-loc").options[e.querySelector(".pl-loc").selectedIndex].text).join(", "));
   }
   if (missing.length) { alert("Please complete:\n\n" + missing.map(m => "  \u2022 " + m).join("\n")); return; }
 
-  // Make sure proof is generated
+  // Make sure proof is generated (preview-only mode now)
   if (document.getElementById("mainLayout").classList.contains("entry-mode")) {
     await generateProof();
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => setTimeout(r, 800));
   }
 
-  // Show generating status
   const btn = document.getElementById("dbxUploadBtn");
   const origText = btn.textContent;
-  btn.textContent = "Generating PDF...";
+  btn.textContent = "Checking…";
   btn.disabled = true;
 
   try {
-    // Generate the PDF blob
+    // ── v8r13: match-check against existing proofs ──
+    // Search the proofs table for entries with the same customer+artwork.
+    // If found, ask the user whether this is an update or a new entry.
+    let mode = 'new';                  // 'new' or 'update'
+    let useArtNumber = artNumField;   // what we'll actually use
+    let existingMatch = null;
+
+    btn.textContent = "Checking for duplicates…";
+    let matches = [];
+    try {
+      matches = await findMatchingProofs(customer, artwork);
+    } catch (e) {
+      console.warn('Match check failed (continuing as new):', e);
+    }
+
+    if (matches.length) {
+      const choice = await showMatchModal(matches);
+      if (choice === 'cancel') {
+        btn.textContent = origText;
+        btn.disabled = false;
+        return;
+      }
+      if (choice === 'update') {
+        mode = 'update';
+        existingMatch = matches[0];
+        useArtNumber = existingMatch.art_number;
+      }
+    }
+
+    // Also check: if user manually edited the art number (or it was generated
+    // and someone else claimed in the meantime), warn if it's already in use
+    // by a DIFFERENT customer/artwork combo.
+    if (mode === 'new') {
+      try {
+        const conflict = await findProofByArtNumber(useArtNumber);
+        if (conflict) {
+          const sameJob =
+            (conflict.customer_name || '').trim().toLowerCase() === customer.toLowerCase() &&
+            (conflict.artwork_name  || '').trim().toLowerCase() === artwork.toLowerCase();
+          if (!sameJob) {
+            const ok = confirm(
+              'Art number "' + useArtNumber + '" is already used by a different proof:\n\n' +
+              '   ' + (conflict.customer_name||'?') + ' / ' + (conflict.artwork_name||'?') + '\n\n' +
+              'Continuing will create a SECOND entry with the same art number, which is usually a mistake. ' +
+              'Proceed anyway?'
+            );
+            if (!ok) {
+              btn.textContent = origText;
+              btn.disabled = false;
+              return;
+            }
+          }
+        }
+      } catch (_) { /* ignore — non-blocking sanity check */ }
+    }
+
+    // Store decision for proceedWithUpload to act on
+    _pendingMode        = mode;
+    _pendingMatchRow    = existingMatch;
+    _pendingArtNum      = useArtNumber;
+    _pendingFolder      = getDbxFolder(useArtNumber);
+    _pendingArtFiles    = plEntries.filter(e => (e._artVariants || []).some(v => v.file));
+
+    // Make sure the on-screen art number reflects what we're about to commit
+    document.getElementById("artNumber").value = useArtNumber;
+
+    // Generate PDF
+    btn.textContent = "Generating PDF…";
     const blob = await generateProofBlob();
+    _pendingBlob = blob;
 
-    // Store for later upload
-    _pendingBlob      = blob;
-    _pendingArtNum    = artNum;
-    _pendingFolder    = getDbxFolder(artNum);
-    _pendingArtFiles  = plEntries.filter(e => e._artFile);
-
-    // Show PDF preview in overlay
+    // Show PDF preview in overlay with the commit message
     const url = URL.createObjectURL(blob);
     document.getElementById("pdfPreviewFrame").src = url;
     document.getElementById("pdfPreviewTitle").textContent =
-      "Review Proof PDF — " + artNum;
+      "Review Proof PDF — " + useArtNumber;
+    const msg = document.getElementById("pdfPreviewCommitMsg");
+    if (mode === 'update') {
+      msg.textContent = '✎ This will UPDATE the existing entry for ' + customer + ' / ' + artwork
+        + ' (art number ' + useArtNumber + '). Files in Dropbox will be overwritten.';
+      msg.style.background = '#FFF5E5';
+      msg.style.color = '#8a5a00';
+    } else {
+      msg.textContent = '+ Commits new art number ' + useArtNumber + ' on upload.';
+      msg.style.background = '#F0F5EE';
+      msg.style.color = '#386641';
+    }
     document.getElementById("pdfUploadProgress").style.display = "none";
     document.getElementById("pdfPreviewOverlay").classList.add("visible");
 
     btn.textContent = origText;
     btn.disabled = false;
   } catch(err) {
-    alert("Error generating PDF: " + err.message);
+    alert("Error preparing upload: " + err.message);
     btn.textContent = origText;
     btn.disabled = false;
+  }
+}
+
+// ── Match-decision modal (v8r13) ──
+// Promise-based: resolves with 'update', 'new', or 'cancel'.
+let _matchModalResolver = null;
+function showMatchModal(matches) {
+  const body = document.getElementById('matchOverlayBody');
+  const m = matches[0];
+  const when = m.created_at ? new Date(m.created_at).toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric' }) : '';
+  body.innerHTML =
+    '<p style="margin:0 0 8px">An existing proof for <strong>' + (m.customer_name||'?') + '</strong> / <strong>' + (m.artwork_name||'?') + '</strong> was found:</p>' +
+    '<div style="background:#F8F8F6;border:1px solid #EDEDEB;border-radius:6px;padding:10px;font-size:12px;line-height:1.6">' +
+      '<div><strong>Art number:</strong> <span style="font-family:monospace;color:#386641">' + (m.art_number||'?') + '</span></div>' +
+      (m.method ? '<div><strong>Method:</strong> ' + m.method + '</div>' : '') +
+      (m.job_number ? '<div><strong>Order/Job #:</strong> ' + m.job_number + '</div>' : '') +
+      (when ? '<div><strong>Created:</strong> ' + when + '</div>' : '') +
+    '</div>' +
+    '<p style="margin:10px 0 0;color:#888780;font-size:12px">' +
+      '<strong>Update Existing</strong> keeps the same art number and overwrites the Dropbox folder. ' +
+      '<strong>Create New</strong> claims a fresh number for a separate job.' +
+    '</p>';
+  document.getElementById('matchOverlay').style.display = 'flex';
+  return new Promise(resolve => { _matchModalResolver = resolve; });
+}
+function matchModalChoice(choice) {
+  document.getElementById('matchOverlay').style.display = 'none';
+  if (_matchModalResolver) {
+    const r = _matchModalResolver;
+    _matchModalResolver = null;
+    r(choice);
   }
 }
 
@@ -872,7 +1121,7 @@ function clearForm() {
   uploads=[]; renderThumbs();
   document.getElementById('plEntries').innerHTML='';
   plCount=0;
-  const af=document.getElementById('artNumber'); af.value=''; af.dataset.claimed='false'; af.style.color='#386641';
+  const af=document.getElementById('artNumber'); af.value=''; delete af.dataset.userEdited; af.style.color='#386641';
   document.getElementById('artNumStatus').textContent='';
   document.getElementById('proofMetaL').textContent='—';
   document.getElementById('proofMetaR').textContent='—';
@@ -881,6 +1130,8 @@ function clearForm() {
   document.getElementById('proofMockups').innerHTML='<div style="color:var(--gray-400);font-size:13px;display:flex;align-items:center;gap:8px;padding:3rem 0">&#128247; Upload mockup images and click Generate Proof</div>';
   document.getElementById('proofDetails').style.display='none';
   document.getElementById('proofDetails').innerHTML='';
+  // Add one empty placement back so user has a starting row
+  addPlacement();
 }
 
 // ── Removed in v8r2: 2 duplicate handleOAuthReturn IIFEs, 2 duplicate
@@ -934,6 +1185,7 @@ async function previewArtNumber() {
 
     const preview = buildArtNumber(rows[0].next_number, method, customer, artwork);
     field.value = preview;
+    delete field.dataset.userEdited;  // programmatic value; user can still edit
     field.style.color = '#888780';
     status.textContent = '(preview — not saved)';
     status.style.color = '#888780';
@@ -997,6 +1249,72 @@ async function claimAndSaveArtNumber(proofData) {
 
   return artNum;
 }
+
+// ── New in v8r13: match existing proofs by customer+artwork ──
+// Returns array of matching rows from the `proofs` table, most-recent first.
+async function findMatchingProofs(customer, artwork) {
+  const cust = (customer || '').trim();
+  const art  = (artwork  || '').trim();
+  if (!cust || !art) return [];
+  // PostgREST ilike accepts %wildcards%, but here we want exact (case-insensitive).
+  // ilike with no wildcards = case-insensitive equality.
+  const url = SUPABASE_URL + '/rest/v1/proofs'
+    + '?customer_name=ilike.' + encodeURIComponent(cust)
+    + '&artwork_name=ilike.'  + encodeURIComponent(art)
+    + '&select=id,art_number,customer_name,artwork_name,method,job_number,garment,dropbox_link,created_at'
+    + '&order=created_at.desc&limit=5';
+  const resp = await fetch(url, {
+    method: 'GET',
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY },
+    mode: 'cors',
+  });
+  if (!resp.ok) throw new Error('Match-check error ' + resp.status + ': ' + await resp.text());
+  return await resp.json();
+}
+
+// Check whether a given art number already exists in the proofs table.
+// Returns the matching row or null.
+async function findProofByArtNumber(artNumber) {
+  if (!artNumber) return null;
+  const url = SUPABASE_URL + '/rest/v1/proofs'
+    + '?art_number=eq.' + encodeURIComponent(artNumber)
+    + '&select=id,art_number,customer_name,artwork_name,created_at&limit=1';
+  const resp = await fetch(url, {
+    method: 'GET',
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY },
+    mode: 'cors',
+  });
+  if (!resp.ok) return null;
+  const rows = await resp.json();
+  return rows.length ? rows[0] : null;
+}
+
+// Update an existing proof row (matched by art_number).
+async function updateExistingProof(artNumber, proofData) {
+  const url = SUPABASE_URL + '/rest/v1/proofs?art_number=eq.' + encodeURIComponent(artNumber);
+  const resp = await fetch(url, {
+    method: 'PATCH',
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': 'Bearer ' + SUPABASE_KEY,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal',
+    },
+    mode: 'cors',
+    body: JSON.stringify({
+      customer_name: proofData.customer_name,
+      artwork_name:  proofData.artwork_name,
+      method:        proofData.method  || null,
+      job_number:    proofData.job_number || null,
+      garment:       proofData.garment    || null,
+      dropbox_link:  proofData.dropbox_link || null,
+      notes:         proofData.notes       || null,
+      placements:    proofData.placements  || [],
+    }),
+  });
+  if (!resp.ok) throw new Error('Update error ' + resp.status + ': ' + await resp.text());
+}
+
 // ── End Supabase ──────────────────────────────────────────────────────────
 
 // ── DB Status + Previous Jobs ─────────────────────────────────────────────────
@@ -1064,7 +1382,7 @@ function loadJob(val) {
 
   // Reset art number — a new proof will get a new number
   const af = document.getElementById('artNumber');
-  af.value = ''; af.dataset.claimed = 'false'; af.style.color = '#386641';
+  af.value = ''; delete af.dataset.userEdited; af.style.color = '#386641';
   document.getElementById('artNumStatus').textContent = '(loaded from previous — new number on Generate)';
   document.getElementById('artNumStatus').style.color = '#888780';
 
@@ -1239,25 +1557,39 @@ async function generateProofBlob() {
       };
     }));
 
-    const plEntries = Array.from(document.querySelectorAll('.pl-entry')).filter(e => e._artFile);
-    const plArtData = await Promise.all(plEntries.map(async e => {
-      const file = e._artFile;
-      const isImg = file.type && file.type.startsWith('image/');
-      const rawUrl = isImg ? await readFileAsDataURL(file) : null;
-      let natW = 0, natH = 0, url = null, fmt = 'PNG';
-      if (rawUrl) {
-        const dim = await measureImage(rawUrl);
-        natW = dim.w; natH = dim.h;
-        const prep = await prepImageForPDF(rawUrl, natW, natH, 400, PROOF_GRAY);
-        if (prep) { url = prep.url; fmt = prep.format; }
-      }
+    // Flatten all variants from all placements into one list. Each item knows
+    // its placement (loc) so the PDF rendering code can optionally group them.
+    const plEntries = Array.from(document.querySelectorAll('.pl-entry'))
+      .filter(e => (e._artVariants || []).some(v => v.file));
+
+    const plArtData = [];
+    for (const e of plEntries) {
       const locVal = e.querySelector('.pl-loc').value;
       const locTxt = e.querySelector('.pl-loc').options[e.querySelector('.pl-loc').selectedIndex].text;
       const sfx = PLACEMENT_SUFFIX[locVal] || locVal.toUpperCase();
-      const ext = file.name.split('.').pop();
-      const fname = (artNum || 'ART') + '-' + sfx + '.' + ext;
-      return { url, fname, loc: locTxt, ext: ext.toUpperCase(), natW, natH, fmt };
-    }));
+      const variants = (e._artVariants || []).filter(v => v.file);
+      const total = variants.length;
+      for (let i = 0; i < variants.length; i++) {
+        const v = variants[i];
+        const file = v.file;
+        const isImg = file.type && file.type.startsWith('image/');
+        const rawUrl = isImg ? await readFileAsDataURL(file) : null;
+        let natW = 0, natH = 0, url = null, fmt = 'PNG';
+        if (rawUrl) {
+          const dim = await measureImage(rawUrl);
+          natW = dim.w; natH = dim.h;
+          const prep = await prepImageForPDF(rawUrl, natW, natH, 400, PROOF_GRAY);
+          if (prep) { url = prep.url; fmt = prep.format; }
+        }
+        const ext = file.name.split('.').pop();
+        const fname = buildVariantFilename(artNum || 'ART', sfx, v.label, ext, i, total);
+        plArtData.push({
+          url, fname, loc: locTxt, ext: ext.toUpperCase(),
+          natW, natH, fmt,
+          variantLabel: v.label || '',
+        });
+      }
+    }
 
     // ── Begin PDF (US Letter, portrait, mm units) ──
     // compress:true enables FlateDecode on streams — smaller PDF and better
@@ -1412,9 +1744,18 @@ async function generateProofBlob() {
         pdf.text(clean(a.loc), cardX + cardW/2, cardY + imgBoxH + 5, {
           align: 'center', maxWidth: cardW - 2
         });
+        // Variant label (if any)
+        let nextY = cardY + imgBoxH + 9;
+        if (a.variantLabel) {
+          pdf.setFont('helvetica', 'italic').setFontSize(6).setTextColor(...C.muted);
+          pdf.text(clean(a.variantLabel), cardX + cardW/2, nextY, {
+            align: 'center', maxWidth: cardW - 2
+          });
+          nextY += 3;
+        }
         // Filename
         pdf.setFont('courier', 'normal').setFontSize(5.5).setTextColor(...C.blue);
-        pdf.text(clean(a.fname), cardX + cardW/2, cardY + imgBoxH + 9, {
+        pdf.text(clean(a.fname), cardX + cardW/2, nextY, {
           align: 'center', maxWidth: cardW - 2
         });
       }
@@ -1520,17 +1861,65 @@ async function proceedWithUpload() {
   upBtn.textContent  = "Uploading...";
 
   try {
-    const total = _pendingArtFiles.length + 2;
+    // ── v8r13: commit art number to DB BEFORE uploading files ──
+    // For 'new' mode, this atomically claims the next number and inserts a
+    // row. For 'update' mode, it overwrites the existing row's fields.
+    const proofData = {
+      customer_name: document.getElementById('customerName').value.trim(),
+      artwork_name:  document.getElementById('artworkName').value.trim(),
+      method:        getPrimaryMethod(),
+      job_number:    document.getElementById('jobNumber').value.trim() || null,
+      garment:       document.getElementById('garmentStyle').value.trim() || null,
+      dropbox_link:  document.getElementById('dropboxLink').value.trim() || null,
+      notes:         document.getElementById('notes').value.trim() || null,
+      placements:    gatherPl(),
+    };
+
+    if (_pendingMode === 'update') {
+      prog.textContent = 'Updating existing entry…';
+      try {
+        await updateExistingProof(_pendingArtNum, proofData);
+      } catch (err) {
+        throw new Error('Update DB row failed: ' + err.message);
+      }
+    } else {
+      prog.textContent = 'Claiming art number…';
+      try {
+        const claimedArtNum = await claimAndSaveArtNumber(proofData);
+        // The RPC may have returned a different number than our preview if
+        // someone else claimed in between. Use the actual claimed value.
+        if (claimedArtNum && claimedArtNum !== _pendingArtNum) {
+          console.warn('Art number drift: preview=' + _pendingArtNum + ', claimed=' + claimedArtNum);
+          _pendingArtNum = claimedArtNum;
+          _pendingFolder = getDbxFolder(claimedArtNum);
+          document.getElementById('artNumber').value = claimedArtNum;
+        }
+      } catch (err) {
+        throw new Error('Claim/save art number failed: ' + err.message);
+      }
+    }
+
+    // Build a flat list of files to upload (one per variant across all placements)
+    const filesToUpload = [];
+    for (const e of _pendingArtFiles) {
+      const loc = e.querySelector(".pl-loc").value;
+      const sfx = PLACEMENT_SUFFIX[loc] || loc.toUpperCase();
+      const variants = (e._artVariants || []).filter(v => v.file);
+      const total = variants.length;
+      variants.forEach((v, i) => {
+        const ext = v.file.name.split(".").pop();
+        const fname = buildVariantFilename(_pendingArtNum, sfx, v.label, ext, i, total);
+        filesToUpload.push({ file: v.file, fname });
+      });
+    }
+
+    const total = filesToUpload.length + 2;
     let step = 1;
 
-    // Upload art files
-    for (const e of _pendingArtFiles) {
-      const loc   = e.querySelector(".pl-loc").value;
-      const sfx   = PLACEMENT_SUFFIX[loc] || loc.toUpperCase();
-      const file  = e._artFile;
-      const fname = _pendingArtNum + "-" + sfx + "." + file.name.split(".").pop();
-      prog.textContent = step + "/" + total + " Uploading " + fname + "...";
-      await dbxUploadFile(_pendingFolder + "/" + fname, file);
+    // Upload art files (one per variant)
+    for (const item of filesToUpload) {
+      prog.textContent = step + "/" + total + " Uploading " + item.fname + "...";
+      await dbxUploadFile(_pendingFolder + "/" + item.fname, item.file);
       step++;
     }
 
@@ -1576,11 +1965,26 @@ if (document.readyState === "loading") {
 
 
 </script>
+
+<!-- Match-decision modal: shown when an existing proof with same customer+artwork is found -->
+<div id="matchOverlay" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:none;align-items:center;justify-content:center;font-family:DM Sans,Arial,sans-serif">
+  <div style="background:#fff;border-radius:12px;padding:24px;max-width:480px;width:92%;box-shadow:0 8px 32px rgba(0,0,0,.2)">
+    <h3 style="margin:0 0 12px;color:#386641;font-size:16px">Existing proof found</h3>
+    <div id="matchOverlayBody" style="font-size:13px;color:#1a1a18;line-height:1.5;margin-bottom:16px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+      <button class="btn btn-secondary" onclick="matchModalChoice('cancel')">Cancel</button>
+      <button class="btn" style="background:#888780;color:#fff;font-weight:500;border:none" onclick="matchModalChoice('new')">Create New Entry</button>
+      <button class="btn" style="background:#386641;color:#fff;font-weight:600;border:none" onclick="matchModalChoice('update')">Update Existing</button>
+    </div>
+  </div>
+</div>
+
 <div class="pdf-preview-overlay" id="pdfPreviewOverlay">
   <div class="pdf-preview-box">
     <h3 id="pdfPreviewTitle">Proof PDF Preview</h3>
     <iframe class="pdf-preview-iframe" id="pdfPreviewFrame"></iframe>
-    <div style="font-size:12px;color:#888780">Review the proof above. Click <strong>Upload to Dropbox</strong> to proceed or <strong>Cancel</strong> to go back.</div>
+    <div id="pdfPreviewCommitMsg" style="font-size:12px;color:#386641;font-weight:500;padding:6px 10px;background:#F0F5EE;border-radius:6px"></div>
+    <div style="font-size:12px;color:#888780">Review the proof above. Click <strong>Upload to Dropbox</strong> to commit the art number and proceed.</div>
     <div class="pdf-preview-btns">
       <button class="btn btn-secondary" onclick="cancelPdfUpload()">Cancel</button>
       <button class="btn" style="background:#386641;color:#fff;font-weight:600;border:none" onclick="proceedWithUpload()">Upload to Dropbox</button>
