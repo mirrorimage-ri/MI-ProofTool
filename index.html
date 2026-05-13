@@ -170,7 +170,7 @@
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:16px">
-    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v8r1</span></span>
+    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v8r2</span></span>
     <div class="db-status" id="dbStatus">
       <div class="db-dot checking" id="dbDot"></div>
       <span id="dbLabel">Checking DB…</span>
@@ -384,17 +384,20 @@ const METHOD_PREFIX = {
 
 let uploads = [];
 let plCount = 0;
-document.getElementById('proofDate').valueAsDate = new Date();
+const _proofDate = document.getElementById('proofDate');
+if (_proofDate) _proofDate.valueAsDate = new Date();
 
 
-// Drag & drop
+// Drag & drop (mockup upload zone)
 const uz = document.getElementById('uploadZone');
-uz.addEventListener('dragover', e => { e.preventDefault(); uz.classList.add('dragover'); });
-uz.addEventListener('dragleave', () => uz.classList.remove('dragover'));
-uz.addEventListener('drop', e => {
-  e.preventDefault(); uz.classList.remove('dragover');
-  Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/') || f.type==='application/pdf').forEach(processFile);
-});
+if (uz) {
+  uz.addEventListener('dragover', e => { e.preventDefault(); uz.classList.add('dragover'); });
+  uz.addEventListener('dragleave', () => uz.classList.remove('dragover'));
+  uz.addEventListener('drop', e => {
+    e.preventDefault(); uz.classList.remove('dragover');
+    Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/') || f.type==='application/pdf').forEach(processFile);
+  });
+}
 
 function handleUpload(e) { Array.from(e.target.files).forEach(processFile); e.target.value=''; }
 
@@ -638,7 +641,12 @@ function getDbxFolder(artNum) {
   return DBX_BASE + '/' + sub + '/' + artNum;
 }
 let dbxToken   = localStorage.getItem('dbx_token') || null;
-let artFileObj = null;
+
+// ── Pending upload state (set by uploadToDropbox, consumed by proceedWithUpload) ──
+let _pendingBlob     = null;
+let _pendingArtNum   = '';
+let _pendingFolder   = '';
+let _pendingArtFiles = [];
 
 
 
@@ -664,6 +672,8 @@ function updateDbxUI() {
   const btn   = document.getElementById('dbxConnectBtn');
   const label = document.getElementById('dbxUserLabel');
   const upBtn = document.getElementById('dbxUploadBtn');
+  // Defensive: if any of these are missing don't crash — just bail.
+  if (!btn || !label || !upBtn) return;
   if (dbxToken) {
     btn.textContent = 'Dropbox Connected (click to disconnect)';
     btn.className = 'dbx-connect-btn connected';
@@ -679,27 +689,10 @@ function updateDbxUI() {
   upBtn.disabled = !(dbxToken && hasAnyArt);
 }
 
-const artZone = document.getElementById('artUploadZone');
-artZone.addEventListener('dragover', e=>{ e.preventDefault(); artZone.classList.add('dragover'); });
-artZone.addEventListener('dragleave', ()=>artZone.classList.remove('dragover'));
-artZone.addEventListener('drop', e=>{ e.preventDefault(); artZone.classList.remove('dragover'); if(e.dataTransfer.files[0]) setArtFile(e.dataTransfer.files[0]); });
-
-function handleArtFile(e) { if(e.target.files[0]) setArtFile(e.target.files[0]); }
-
-function setArtFile(file) {
-  artFileObj = file;
-  const chip = document.getElementById('artFileChip');
-  chip.style.display = 'block';
-  chip.innerHTML = '<span class="art-file-chip">Art: ' + file.name + ' <button class="rm" onclick="clearArtFile()">&times;</button></span>';
-  updateDbxUI();
-}
-
-function clearArtFile() {
-  artFileObj = null;
-  document.getElementById('artFileChip').style.display = 'none';
-  document.getElementById('artFileInput').value = '';
-  updateDbxUI();
-}
+// ── Removed in v8r2: orphan single-art-file upload (artZone, artFileObj,
+// setArtFile, clearArtFile, handleArtFile). Replaced by per-placement art
+// uploads. The `artUploadZone` element it referenced didn't exist in the DOM,
+// so this block crashed on load and halted the rest of the script. ──
 
 
 async function dbxUploadFile(path, content) {
@@ -790,44 +783,9 @@ async function uploadToDropbox() {
   }
 }
 
-function closeUploadModal() { document.getElementById("uploadOverlay").classList.remove("visible"); }
-
-async function confirmUpload() {
-  const artNum = document.getElementById("artNumber").value.trim();
-  const prog = document.getElementById("modalProgress");
-  const btn  = document.getElementById("modalConfirmBtn");
-  prog.style.display = "block"; prog.style.color = "#6A994E";
-  btn.disabled = true; btn.textContent = "Uploading...";
-  try {
-    const folder = getDbxFolder(artNum);
-    const entries = Array.from(document.querySelectorAll(".pl-entry")).filter(e => e._artFile);
-    const total = entries.length + 2; let step = 1;
-    for (const e of entries) {
-      const sfx = PLACEMENT_SUFFIX[e.querySelector(".pl-loc").value] || e.querySelector(".pl-loc").value.toUpperCase();
-      const fname = artNum + "-" + sfx + "." + e._artFile.name.split(".").pop();
-      prog.textContent = step + "/" + total + " Uploading " + fname + "...";
-      await dbxUploadFile(folder + "/" + fname, e._artFile); step++;
-    }
-    prog.textContent = step + "/" + total + " Generating proof...";
-    const el = document.getElementById("proofOutput");
-    const [ow,om,oa] = [el.style.width, el.style.maxWidth, el.style.aspectRatio];
-    el.style.width = "800px"; el.style.maxWidth = "none"; el.style.aspectRatio = "unset";
-    await new Promise(r => setTimeout(r, 600));
-    const blob = await generateProofBlob();
-    el.style.width = ow; el.style.maxWidth = om; el.style.aspectRatio = oa; step++;
-    await dbxUploadFile(folder + "/" + artNum + "_proof.pdf", blob);
-    prog.textContent = step + "/" + total + " Creating link...";
-    const link = await dbxGetOrCreateLink(folder);
-    if (link) document.getElementById("dropboxLink").value = link;
-    prog.textContent = "\u2713 Done!";
-    prog.style.color = "#386641"; btn.textContent = "\u2713 Done";
-    setTimeout(closeUploadModal, 2000);
-  } catch(err) {
-    prog.textContent = "Error: " + err.message; prog.style.color = "#BC4749";
-    btn.disabled = false; btn.textContent = "Retry";
-  }
-}
-
+// ── Removed in v8r2: closeUploadModal() and confirmUpload(). They referenced
+// the #uploadOverlay modal which nothing ever opens. The real upload path is
+// uploadToDropbox() → #pdfPreviewOverlay → proceedWithUpload(). ──
 
 
 addPlacement();
@@ -877,71 +835,9 @@ function clearForm() {
   document.getElementById('proofDetails').innerHTML='';
 }
 
-
-
-
-(function handleOAuthReturn() {
-  const hash = window.location.hash;
-  if (hash.includes('access_token=')) {
-    const params = new URLSearchParams(hash.replace('#','?'));
-    const token = params.get('access_token');
-    if (token) { dbxToken = token; localStorage.setItem('dbx_token', token); history.replaceState(null,'',window.location.pathname); }
-  }
-  updateDbxUI();
-})();
-
-
-
-artZone.addEventListener('dragover', e=>{ e.preventDefault(); artZone.classList.add('dragover'); });
-artZone.addEventListener('dragleave', ()=>artZone.classList.remove('dragover'));
-artZone.addEventListener('drop', e=>{ e.preventDefault(); artZone.classList.remove('dragover'); if(e.dataTransfer.files[0]) setArtFile(e.dataTransfer.files[0]); });
-
-
-
-
-
-
-
-
-
-
-
-
-addPlacement();
-
-
-
-
-// ── Supabase ──────────────────────────────────────────────────────────────
-
-(function handleOAuthReturn() {
-  const hash = window.location.hash;
-  if (hash.includes('access_token=')) {
-    const params = new URLSearchParams(hash.replace('#','?'));
-    const token = params.get('access_token');
-    if (token) { dbxToken = token; localStorage.setItem('dbx_token', token); history.replaceState(null,'',window.location.pathname); }
-  }
-  updateDbxUI();
-})();
-
-
-
-artZone.addEventListener('dragover', e=>{ e.preventDefault(); artZone.classList.add('dragover'); });
-artZone.addEventListener('dragleave', ()=>artZone.classList.remove('dragover'));
-artZone.addEventListener('drop', e=>{ e.preventDefault(); artZone.classList.remove('dragover'); if(e.dataTransfer.files[0]) setArtFile(e.dataTransfer.files[0]); });
-
-
-
-
-
-
-
-
-
-
-addPlacement();
-
-
+// ── Removed in v8r2: 2 duplicate handleOAuthReturn IIFEs, 2 duplicate
+// artZone.addEventListener blocks, and 2 duplicate addPlacement() calls
+// that had accumulated here from earlier sloppy string-replace edits. ──
 
 
 // ── Supabase ──────────────────────────────────────────────────────────────
@@ -1272,9 +1168,14 @@ async function generateProofBlob() {
     </div>
   `;
 
-  // Render in offscreen wrapper
+  // Render in offscreen wrapper.
+  // IMPORTANT: html2canvas reads getBoundingClientRect() to compute its draw
+  // region. position:fixed with extreme negative offsets returns coordinates
+  // outside the viewport and produces blank/clipped canvases. position:absolute
+  // with left:-9999px keeps the element in the normal layout flow (so it has
+  // real, non-negative client coords for rendering) while staying off-screen.
   const wrapper = document.createElement('div');
-  wrapper.style.cssText = 'position:fixed;top:-99999px;left:-99999px;width:800px;background:#fff;z-index:-9999';
+  wrapper.style.cssText = 'position:absolute;left:-9999px;top:0;width:800px;background:#fff;';
   wrapper.innerHTML = fullHtml;
   document.body.appendChild(wrapper);
 
@@ -1289,14 +1190,32 @@ async function generateProofBlob() {
     });
   }));
 
+  // The actual element we render is wrapper.firstElementChild (the 780px-wide
+  // proof div). Make sure it's measurable BEFORE handing it to html2pdf —
+  // a forced reflow guarantees layout is complete.
+  const renderTarget = wrapper.firstElementChild;
+  // eslint-disable-next-line no-unused-expressions
+  renderTarget.offsetHeight; // force reflow
+
   return new Promise((resolve, reject) => {
     html2pdf().set({
       margin: [10, 10, 10, 10],
       image: { type: 'jpeg', quality: 0.95 },
-      html2canvas: { scale: 2, useCORS: true, allowTaint: true, backgroundColor: '#ffffff', logging: false, windowWidth: 800 },
+      html2canvas: {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        windowWidth: 800,
+        // Tell html2canvas the source element's size explicitly so it
+        // doesn't try to infer dimensions from a viewport-relative box.
+        width: renderTarget.offsetWidth,
+        height: renderTarget.offsetHeight,
+      },
       jsPDF: { unit: 'mm', format: 'letter', orientation: 'portrait' },
       pagebreak: { mode: 'avoid-all' },
-    }).from(wrapper.firstElementChild).outputPdf('blob').then(blob => {
+    }).from(renderTarget).outputPdf('blob').then(blob => {
       document.body.removeChild(wrapper);
       resolve(blob);
     }).catch(err => {
@@ -1388,21 +1307,6 @@ if (document.readyState === "loading") {
       <button class="btn" style="background:#386641;color:#fff;font-weight:600;border:none" onclick="proceedWithUpload()">Upload to Dropbox</button>
     </div>
     <div id="pdfUploadProgress" style="font-size:12px;color:#6A994E;display:none;text-align:center"></div>
-  </div>
-</div>
-<div class="upload-overlay" id="uploadOverlay">
-  <div class="upload-modal">
-    <h3>Confirm Dropbox Upload</h3>
-    <div class="upload-modal-section"><strong>Destination folder</strong>
-      <span id="modalFolder" style="font-family:monospace;font-size:12px;color:#386641"></span></div>
-    <div class="upload-modal-section"><strong>Files to upload</strong>
-      <div id="modalFiles"></div></div>
-    <p style="font-size:12px;color:#888780;margin:0">Proof PDF generated fresh before uploading.</p>
-    <div class="upload-modal-btns">
-      <button class="btn btn-secondary" onclick="closeUploadModal()">Cancel</button>
-      <button class="btn" id="modalConfirmBtn" onclick="confirmUpload()" style="background:#0061fe;color:#fff;font-weight:600;border:none">Confirm Upload</button>
-    </div>
-    <div id="modalProgress" style="font-size:12px;color:#6A994E;display:none;text-align:center;margin-top:4px"></div>
   </div>
 </div>
 
