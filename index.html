@@ -174,7 +174,7 @@
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:16px">
-    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v8r14</span></span>
+    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v8r15</span></span>
     <div class="db-status" id="dbStatus">
       <div class="db-dot checking" id="dbDot"></div>
       <span id="dbLabel">Checking DB…</span>
@@ -332,7 +332,7 @@
       <div class="field"><label>Decoration Method</label>
         <select class="pl-method">
           <option>Screenprint</option><option>Embroidery</option><option>DTG</option>
-          <option>DTF</option><option>Heat Transfer</option><option>Vinyl</option>
+          <option selected>DTF</option><option>Heat Transfer</option><option>Vinyl</option>
           <option>Sublimation</option><option>Patch</option><option>Other</option>
         </select>
       </div>
@@ -374,6 +374,39 @@
 <script>
 const SUPABASE_URL = "https://upyohtshvvdmbubuionh.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVweW9odHNodnZkbWJ1YnVpb25oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgyNTI1MDEsImV4cCI6MjA5MzgyODUwMX0.FXsywxj6FrhLqHAyQ1HEy53lCkNmCL8In1jFUnD1U-U";
+
+// ── Tool version (v8r15) ──
+// Bumped whenever the file changes. Appears in the header and PDF footer
+// so any deployed proof can be traced back to the tool revision that made it.
+const TOOL_VERSION = 'V8R15';
+
+// Build the timestamp+version string used in proof footers.
+// Format: "YYYY-MM-DD HH:MM TZ Vx.y"  e.g. "2026-05-13 17:24 EST V8R15"
+function buildFooterStamp() {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mi = String(now.getMinutes()).padStart(2, '0');
+  // Try to derive a short timezone abbreviation (EST, EDT, etc.) from the
+  // long-form locale string. Falls back to numeric offset if not available.
+  let tz = '';
+  try {
+    const long = now.toLocaleTimeString('en-US', { timeZoneName: 'short' });
+    const match = long.match(/\b([A-Z]{2,5})\b/);
+    if (match) tz = match[1];
+  } catch (_) {}
+  if (!tz) {
+    const offsetMin = -now.getTimezoneOffset();
+    const sign = offsetMin >= 0 ? '+' : '-';
+    const oh = String(Math.floor(Math.abs(offsetMin) / 60)).padStart(2, '0');
+    const om = String(Math.abs(offsetMin) % 60).padStart(2, '0');
+    tz = 'UTC' + sign + oh + ':' + om;
+  }
+  return yyyy + '-' + mm + '-' + dd + ' ' + hh + ':' + mi + ' ' + tz + ' ' + TOOL_VERSION;
+}
+
 // Safe lazy init — won't crash the rest of the app if CDN fails
 let sb = null;
 function getSB() {
@@ -770,9 +803,9 @@ async function generateProof() {
           `;
         }));
         const groupHeader = g.variants.length > 1
-          ? `<div style="font-size:10px;font-weight:600;color:#386641;margin-bottom:6px">${g.loc} <span style="color:#888780;font-weight:400">(${g.variants.length} variants)</span></div>`
-          : `<div style="font-size:10px;font-weight:600;color:#386641;margin-bottom:6px">${g.loc}</div>`;
-        return `<div style="margin-bottom:12px">${groupHeader}<div style="display:flex;gap:10px;flex-wrap:wrap">${variantHtmls.join('')}</div></div>`;
+          ? `<div style="font-size:10px;font-weight:600;color:#386641;margin-bottom:6px;text-align:center">${g.loc} <span style="color:#888780;font-weight:400">(${g.variants.length} variants)</span></div>`
+          : `<div style="font-size:10px;font-weight:600;color:#386641;margin-bottom:6px;text-align:center">${g.loc}</div>`;
+        return `<div style="margin-bottom:12px">${groupHeader}<div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">${variantHtmls.join('')}</div></div>`;
       }));
 
       plArtSection.innerHTML =
@@ -800,7 +833,7 @@ async function generateProof() {
   if(fields.length){ dt.style.display='grid'; dt.innerHTML=fields.map(([l,v])=>'<div class="proof-di"><label style="color:#386641">'+l+'</label><p style="color:#386641">'+v+'</p></div>').join(''); }
   else { dt.style.display='none'; }
   document.getElementById('proofFootL').textContent='Mirror Image  \u00b7  '+customer+'  \u00b7  '+artwork;
-  document.getElementById('proofFootR').textContent='Generated '+new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  document.getElementById('proofFootR').textContent=buildFooterStamp();
 }
 // Dropbox Integration
 const DBX_APP_KEY  = '1c4kmzj8a1k2g5k';
@@ -1144,7 +1177,7 @@ function clearForm() {
 // Returns the primary decoration method from the first placement entry
 function getPrimaryMethod() {
   const first = document.querySelector('.pl-method');
-  return first ? first.value : 'Screenprint';
+  return first ? first.value : 'DTF';
 }
 
 // Build art number string from counter number + form fields
@@ -1694,10 +1727,10 @@ async function generateProofBlob() {
     }
     y += mockupAreaH + 5;
 
-    // ── Placement art cards ──
+    // ── Placement art cards (v8r15: grouped by placement, each row centered) ──
     if (plArtData.length) {
       pdf.setFont('helvetica', 'bold').setFontSize(8).setTextColor(...C.green);
-      pdf.text('PRINT PLACEMENT ART', M, y + 3);
+      pdf.text('PRINT PLACEMENT ART', PW/2, y + 3, { align: 'center' });
       y += 5;
 
       const cardW = 42;
@@ -1706,62 +1739,99 @@ async function generateProofBlob() {
       const cardsPerRow = Math.max(1, Math.floor((usableW + cardGap) / (cardW + cardGap)));
       const imgBoxH = 32;
 
-      for (let i = 0; i < plArtData.length; i++) {
-        const a = plArtData[i];
-        const row = Math.floor(i / cardsPerRow);
-        const col = i % cardsPerRow;
-        const cardX = M + col * (cardW + cardGap);
-        const cardY = y + row * (cardH + cardGap);
-
-        // Card frame (white with thin border)
-        pdf.setDrawColor(...C.border).setFillColor(255, 255, 255).setLineWidth(0.2);
-        pdf.rect(cardX, cardY, cardW, cardH, 'FD');
-
-        // Gray image area (so white artwork is visible — v8r9)
-        const imgPadX = 2;
-        const imgPadY = 2;
-        const innerImgW = cardW - 2 * imgPadX;
-        pdf.setFillColor(...C.grayBg);
-        pdf.rect(cardX + imgPadX, cardY + imgPadY, innerImgW, imgBoxH, 'F');
-
-        // Image (or extension placeholder)
-        if (a.url) {
-          const ratio = Math.min(innerImgW / a.natW, imgBoxH / a.natH);
-          const w = a.natW * ratio;
-          const h = a.natH * ratio;
-          try {
-            pdf.addImage(a.url, a.fmt, cardX + (cardW - w)/2, cardY + imgPadY + (imgBoxH - h)/2, w, h, undefined, 'FAST');
-          } catch (err) {
-            // gray rect is already there as the fallback look
-          }
-        } else {
-          // Non-image file — render extension as a label on gray bg
-          pdf.setFont('helvetica', 'bold').setFontSize(11).setTextColor(...C.muted);
-          pdf.text(a.ext, cardX + cardW/2, cardY + imgPadY + imgBoxH/2 + 1, { align: 'center' });
+      // Group cards by placement location so each location's variants
+      // stay together. Then render each group as one or more rows of
+      // cards, centered.
+      const groups = [];
+      const groupMap = new Map();
+      for (const a of plArtData) {
+        if (!groupMap.has(a.loc)) {
+          const g = { loc: a.loc, cards: [] };
+          groupMap.set(a.loc, g);
+          groups.push(g);
         }
-
-        // Location label
-        pdf.setFont('helvetica', 'bold').setFontSize(7).setTextColor(...C.green);
-        pdf.text(clean(a.loc), cardX + cardW/2, cardY + imgBoxH + 5, {
-          align: 'center', maxWidth: cardW - 2
-        });
-        // Variant label (if any)
-        let nextY = cardY + imgBoxH + 9;
-        if (a.variantLabel) {
-          pdf.setFont('helvetica', 'italic').setFontSize(6).setTextColor(...C.muted);
-          pdf.text(clean(a.variantLabel), cardX + cardW/2, nextY, {
-            align: 'center', maxWidth: cardW - 2
-          });
-          nextY += 3;
-        }
-        // Filename
-        pdf.setFont('courier', 'normal').setFontSize(5.5).setTextColor(...C.blue);
-        pdf.text(clean(a.fname), cardX + cardW/2, nextY, {
-          align: 'center', maxWidth: cardW - 2
-        });
+        groupMap.get(a.loc).cards.push(a);
       }
-      const rows = Math.ceil(plArtData.length / cardsPerRow);
-      y += rows * (cardH + cardGap) + 3;
+
+      for (const g of groups) {
+        // Group header (location name) — centered, only if there are >1 groups
+        // OR there are variants (so user can tell which is which).
+        const showHeader = groups.length > 1 || g.cards.some(c => c.variantLabel);
+        if (showHeader) {
+          pdf.setFont('helvetica', 'bold').setFontSize(7).setTextColor(...C.green);
+          const headerText = g.cards.length > 1
+            ? g.loc + ' (' + g.cards.length + ' variants)'
+            : g.loc;
+          pdf.text(clean(headerText), PW/2, y + 2, { align: 'center' });
+          y += 4;
+        }
+
+        // Walk the group's cards in rows of cardsPerRow, centering each row
+        const groupCards = g.cards;
+        for (let rowStart = 0; rowStart < groupCards.length; rowStart += cardsPerRow) {
+          const rowCards = groupCards.slice(rowStart, rowStart + cardsPerRow);
+          const rowWidth = rowCards.length * cardW + (rowCards.length - 1) * cardGap;
+          const rowStartX = M + (usableW - rowWidth) / 2;
+
+          rowCards.forEach((a, j) => {
+            const cardX = rowStartX + j * (cardW + cardGap);
+            const cardY = y;
+
+            // Card frame (white with thin border)
+            pdf.setDrawColor(...C.border).setFillColor(255, 255, 255).setLineWidth(0.2);
+            pdf.rect(cardX, cardY, cardW, cardH, 'FD');
+
+            // Gray image area (so white artwork is visible)
+            const imgPadX = 2;
+            const imgPadY = 2;
+            const innerImgW = cardW - 2 * imgPadX;
+            pdf.setFillColor(...C.grayBg);
+            pdf.rect(cardX + imgPadX, cardY + imgPadY, innerImgW, imgBoxH, 'F');
+
+            // Image (or extension placeholder)
+            if (a.url) {
+              const ratio = Math.min(innerImgW / a.natW, imgBoxH / a.natH);
+              const w = a.natW * ratio;
+              const h = a.natH * ratio;
+              try {
+                pdf.addImage(a.url, a.fmt, cardX + (cardW - w)/2, cardY + imgPadY + (imgBoxH - h)/2, w, h, undefined, 'FAST');
+              } catch (err) {
+                // gray rect already there as the fallback look
+              }
+            } else {
+              pdf.setFont('helvetica', 'bold').setFontSize(11).setTextColor(...C.muted);
+              pdf.text(a.ext, cardX + cardW/2, cardY + imgPadY + imgBoxH/2 + 1, { align: 'center' });
+            }
+
+            // Variant label (if any) — placement name already in group header
+            // when there's >1 placement, but include placement name here too
+            // when this is the only placement (no header shown above)
+            let nextY = cardY + imgBoxH + 5;
+            if (!showHeader) {
+              pdf.setFont('helvetica', 'bold').setFontSize(7).setTextColor(...C.green);
+              pdf.text(clean(a.loc), cardX + cardW/2, nextY, {
+                align: 'center', maxWidth: cardW - 2
+              });
+              nextY += 4;
+            }
+            if (a.variantLabel) {
+              pdf.setFont('helvetica', 'italic').setFontSize(6).setTextColor(...C.muted);
+              pdf.text(clean(a.variantLabel), cardX + cardW/2, nextY, {
+                align: 'center', maxWidth: cardW - 2
+              });
+              nextY += 3;
+            }
+            // Filename
+            pdf.setFont('courier', 'normal').setFontSize(5.5).setTextColor(...C.blue);
+            pdf.text(clean(a.fname), cardX + cardW/2, nextY, {
+              align: 'center', maxWidth: cardW - 2
+            });
+          });
+
+          y += cardH + cardGap;
+        }
+      }
+      y += 1;
     }
 
     // ── Details section ──
@@ -1780,30 +1850,100 @@ async function generateProofBlob() {
       y += 4;
     }
 
-    if (baseFields.length) {
-      const colW = usableW / 2;
+    // ── v8r15: dynamic font scaling so details fit between y and the footer ──
+    // The footer occupies the bottom M (12mm) of the page plus a few mm of
+    // separator. Compute available vertical space, measure required space at
+    // default font sizes, and scale down (down to ~60%) if needed.
+    const FOOTER_RESERVED = 8;          // mm reserved for footer line + text
+    const availH = (PH - M - FOOTER_RESERVED) - y;
+    const DEFAULT_LABEL_PT = 7;
+    const DEFAULT_BODY_PT  = 10;
+    const DEFAULT_LINE_MM  = 4;          // body line height in mm
+    const DEFAULT_GAP_MM   = 3;          // gap between rows
+    const colW = usableW / 2;
+
+    // Measure required height at default sizes
+    function measureDetailsHeight(bodyPt, lineMm, gapMm) {
+      // proportionally scaled line metrics for the trial
+      const labelMm = bodyPt * 0.42;     // label baseline offset
+      let need = 0;
+      // baseFields rows (two columns)
+      pdf.setFontSize(bodyPt);
       for (let i = 0; i < baseFields.length; i += 2) {
         const a = baseFields[i];
         const b = baseFields[i+1];
-        pdf.setFont('helvetica', 'bold').setFontSize(7).setTextColor(...C.green);
+        const aLines = pdf.splitTextToSize(clean(a[1]), colW - 3).length;
+        const bLines = b ? pdf.splitTextToSize(clean(b[1]), colW - 3).length : 0;
+        const rowH = Math.max(aLines, bLines || 1);
+        need += labelMm + rowH * lineMm + gapMm;
+      }
+      // placement rows (full width)
+      for (const p of placements) {
+        const detailParts = [
+          (p.w && p.h) ? `${p.w}" W x ${p.h}" H` : (p.w ? `${p.w}" W` : (p.h ? `${p.h}" H` : '')),
+          p.collar ? `${p.collar}" from collar` : '',
+          p.center ? `${p.center}" from center` : '',
+          p.method, p.colors, p.desc,
+        ].filter(Boolean);
+        const detail = clean(detailParts.join(' / '));
+        const lines = pdf.splitTextToSize(detail, usableW).length;
+        need += labelMm + lines * lineMm + gapMm;
+      }
+      // notes (full width)
+      if (notes) {
+        const lines = pdf.splitTextToSize(clean(notes), usableW).length;
+        need += labelMm + lines * lineMm + gapMm;
+      }
+      return need;
+    }
+
+    // Find largest scale that fits. Try 100%, 90%, 80%, 70%, 60% in turn.
+    // 60% on a 10pt body = 6pt — still legible. If even 60% doesn't fit,
+    // we use 60% anyway (the alternative would be paging, which you said
+    // to skip for now).
+    let scale = 1.0;
+    const trials = [1.0, 0.9, 0.8, 0.7, 0.6];
+    for (const s of trials) {
+      const trialBody = DEFAULT_BODY_PT * s;
+      const trialLine = DEFAULT_LINE_MM * s;
+      const trialGap  = DEFAULT_GAP_MM  * s;
+      const needed = measureDetailsHeight(trialBody, trialLine, trialGap);
+      if (needed <= availH) { scale = s; break; }
+      scale = s;  // keep last scale in case nothing fits
+    }
+
+    // Now render with the chosen scale
+    const bodyPt = DEFAULT_BODY_PT * scale;
+    const labelPt = DEFAULT_LABEL_PT * scale;
+    const lineMm = DEFAULT_LINE_MM * scale;
+    const gapMm  = DEFAULT_GAP_MM  * scale;
+    // Label baseline sits ~ labelPt * 0.5 below the y-origin of the label row.
+    // We previously used hard-coded +4 for body offset; scale that too.
+    const labelToBodyOffset = 4 * scale;
+
+    if (baseFields.length) {
+      for (let i = 0; i < baseFields.length; i += 2) {
+        const a = baseFields[i];
+        const b = baseFields[i+1];
+        pdf.setFont('helvetica', 'bold').setFontSize(labelPt).setTextColor(...C.green);
         pdf.text(a[0].toUpperCase(), M, y);
         if (b) pdf.text(b[0].toUpperCase(), M + colW, y);
-        pdf.setFont(a[2], 'normal').setFontSize(10).setTextColor(...C.darkTx);
+        pdf.setFont(a[2], 'normal').setFontSize(bodyPt).setTextColor(...C.darkTx);
         const aLines = pdf.splitTextToSize(clean(a[1]), colW - 3);
-        pdf.text(aLines, M, y + 4);
+        pdf.text(aLines, M, y + labelToBodyOffset);
         if (b) {
           pdf.setFont(b[2], 'normal');
           const bLines = pdf.splitTextToSize(clean(b[1]), colW - 3);
-          pdf.text(bLines, M + colW, y + 4);
+          pdf.text(bLines, M + colW, y + labelToBodyOffset);
         }
         const rowH = Math.max(aLines.length, b ? pdf.splitTextToSize(clean(b[1]), colW - 3).length : 1);
-        y += 4 + rowH * 4 + 3;
+        y += labelToBodyOffset + rowH * lineMm + gapMm;
       }
     }
 
     // Placement details (one row per placement, full width)
     placements.forEach((p, i) => {
-      pdf.setFont('helvetica', 'bold').setFontSize(7).setTextColor(...C.green);
+      pdf.setFont('helvetica', 'bold').setFontSize(labelPt).setTextColor(...C.green);
       pdf.text(`PLACEMENT ${i+1} - ${p.loc.toUpperCase()}`, M, y);
       const detailParts = [
         (p.w && p.h) ? `${p.w}" W x ${p.h}" H` : (p.w ? `${p.w}" W` : (p.h ? `${p.h}" H` : '')),
@@ -1811,21 +1951,21 @@ async function generateProofBlob() {
         p.center ? `${p.center}" from center` : '',
         p.method, p.colors, p.desc,
       ].filter(Boolean);
-      pdf.setFont('helvetica', 'normal').setFontSize(10).setTextColor(...C.darkTx);
+      pdf.setFont('helvetica', 'normal').setFontSize(bodyPt).setTextColor(...C.darkTx);
       const detail = clean(detailParts.join(' / '));
       const lines = pdf.splitTextToSize(detail, usableW);
-      pdf.text(lines, M, y + 4);
-      y += 4 + lines.length * 4 + 3;
+      pdf.text(lines, M, y + labelToBodyOffset);
+      y += labelToBodyOffset + lines.length * lineMm + gapMm;
     });
 
     // Notes (wrap to width)
     if (notes) {
-      pdf.setFont('helvetica', 'bold').setFontSize(7).setTextColor(...C.green);
+      pdf.setFont('helvetica', 'bold').setFontSize(labelPt).setTextColor(...C.green);
       pdf.text('NOTES', M, y);
-      pdf.setFont('helvetica', 'normal').setFontSize(10).setTextColor(...C.darkTx);
+      pdf.setFont('helvetica', 'normal').setFontSize(bodyPt).setTextColor(...C.darkTx);
       const noteLines = pdf.splitTextToSize(clean(notes), usableW);
-      pdf.text(noteLines, M, y + 4);
-      y += 4 + noteLines.length * 4 + 3;
+      pdf.text(noteLines, M, y + labelToBodyOffset);
+      y += labelToBodyOffset + noteLines.length * lineMm + gapMm;
     }
 
     // ── Footer (always at bottom of page) ──
@@ -1835,9 +1975,8 @@ async function generateProofBlob() {
     pdf.setFont('helvetica', 'normal').setFontSize(8).setTextColor(...C.muted);
     const footerL = ['Mirror Image', customer, artwork].filter(Boolean).join(' - ');
     pdf.text(clean(footerL), M, footerY - 1);
-    const dateStr = (date ? new Date(date + 'T00:00:00') : new Date())
-      .toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    pdf.text(`Generated ${dateStr}`, PW - M, footerY - 1, { align: 'right' });
+    // v8r15: footer right side = "YYYY-MM-DD HH:MM TZ vX.Y"
+    pdf.text(buildFooterStamp(), PW - M, footerY - 1, { align: 'right' });
 
     const blob = pdf.output('blob');
     return blob;
