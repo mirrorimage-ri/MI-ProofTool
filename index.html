@@ -174,7 +174,7 @@
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:16px">
-    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v8r7</span></span>
+    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v8r8</span></span>
     <div class="db-status" id="dbStatus">
       <div class="db-dot checking" id="dbDot"></div>
       <span id="dbLabel">Checking DB…</span>
@@ -1140,6 +1140,60 @@ function readFileAsDataURL(file) {
   });
 }
 
+// ── PDF image prep (v8r8) ──
+// jsPDF.addImage embeds the FULL source pixel data into the PDF regardless
+// of display dimensions. The first working PDF (v8r7) was 38MB because a
+// 2000x2472px hoodie mockup was being embedded at full resolution just to
+// render as a ~600px-wide thumbnail. We downsample to print-appropriate
+// resolution (max 800px on the long edge), composite onto white to handle
+// transparency, and convert to JPEG at 85% quality.
+//
+// Returns { url, format } for use with pdf.addImage(...).
+function prepImageForPDF(dataUrl, natW, natH, maxPx) {
+  return new Promise(resolve => {
+    if (!dataUrl) { resolve(null); return; }
+    // Detect format from data URL prefix for fallback
+    const detectFmt = u => {
+      if (!u) return 'PNG';
+      if (u.startsWith('data:image/jpeg')) return 'JPEG';
+      if (u.startsWith('data:image/webp')) return 'WEBP';
+      return 'PNG';
+    };
+    // If source already fits under the cap on both axes, skip canvas round-trip.
+    // (Small icons stay sharp; we only shrink the big stuff.)
+    if (natW && natH && natW <= maxPx && natH <= maxPx) {
+      resolve({ url: dataUrl, format: detectFmt(dataUrl) });
+      return;
+    }
+    const img = new Image();
+    img.onload = () => {
+      const w = img.naturalWidth, h = img.naturalHeight;
+      const ratio = Math.min(maxPx / w, maxPx / h, 1);
+      const newW = Math.max(1, Math.round(w * ratio));
+      const newH = Math.max(1, Math.round(h * ratio));
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = newW;
+        canvas.height = newH;
+        const ctx = canvas.getContext('2d');
+        // White background — JPEG doesn't support transparency, and the
+        // mockup row in the proof is light gray anyway, so a slight white
+        // edge is acceptable. (Could pass bgColor in if we want to match
+        // each region exactly, but white works fine for now.)
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, newW, newH);
+        ctx.drawImage(img, 0, 0, newW, newH);
+        resolve({ url: canvas.toDataURL('image/jpeg', 0.85), format: 'JPEG' });
+      } catch (err) {
+        // Canvas tainted or some other failure — fall back to original
+        resolve({ url: dataUrl, format: detectFmt(dataUrl) });
+      }
+    };
+    img.onerror = () => resolve({ url: dataUrl, format: detectFmt(dataUrl) });
+    img.src = dataUrl;
+  });
+}
+
 async function generateProofBlob() {
   // ── v8r6 PDF strategy: JSPDF DIRECT (no html2canvas) ──
   //
@@ -1196,30 +1250,33 @@ async function generateProofBlob() {
   document.body.appendChild(overlay);
 
   try {
-    // ── Prep images (data URLs + natural dimensions) ──
+    // ── Prep images (data URLs + natural dimensions + downsampling) ──
+    // Mockups get up to 800px on the long edge (rendered at ~75mm wide, that's
+    // ~270 DPI — plenty crisp for print). Placement art thumbnails get 400px
+    // (rendered at ~38mm, also ~270 DPI). See prepImageForPDF for details.
     const mockupSrc = uploads.filter(u => u.type !== 'application/pdf');
     const mockupData = await Promise.all(mockupSrc.map(async m => {
       const dim = await measureImage(m.url);
-      // jsPDF needs to know the image format. Sniff from data URL prefix.
-      let fmt = 'PNG';
-      if (m.url && m.url.startsWith('data:image/jpeg')) fmt = 'JPEG';
-      else if (m.url && m.url.startsWith('data:image/png')) fmt = 'PNG';
-      else if (m.url && m.url.startsWith('data:image/webp')) fmt = 'WEBP';
-      return { url: m.url, name: m.name, natW: dim.w, natH: dim.h, fmt };
+      const prep = await prepImageForPDF(m.url, dim.w, dim.h, 800);
+      return {
+        url:  prep ? prep.url    : m.url,
+        fmt:  prep ? prep.format : 'PNG',
+        name: m.name,
+        natW: dim.w, natH: dim.h,   // keep ORIGINAL dimensions for fit-to-box math
+      };
     }));
 
     const plEntries = Array.from(document.querySelectorAll('.pl-entry')).filter(e => e._artFile);
     const plArtData = await Promise.all(plEntries.map(async e => {
       const file = e._artFile;
       const isImg = file.type && file.type.startsWith('image/');
-      const url = isImg ? await readFileAsDataURL(file) : null;
-      let natW = 0, natH = 0, fmt = 'PNG';
-      if (url) {
-        const dim = await measureImage(url);
+      const rawUrl = isImg ? await readFileAsDataURL(file) : null;
+      let natW = 0, natH = 0, url = null, fmt = 'PNG';
+      if (rawUrl) {
+        const dim = await measureImage(rawUrl);
         natW = dim.w; natH = dim.h;
-        if (url.startsWith('data:image/jpeg')) fmt = 'JPEG';
-        else if (url.startsWith('data:image/png')) fmt = 'PNG';
-        else if (url.startsWith('data:image/webp')) fmt = 'WEBP';
+        const prep = await prepImageForPDF(rawUrl, natW, natH, 400);
+        if (prep) { url = prep.url; fmt = prep.format; }
       }
       const locVal = e.querySelector('.pl-loc').value;
       const locTxt = e.querySelector('.pl-loc').options[e.querySelector('.pl-loc').selectedIndex].text;
