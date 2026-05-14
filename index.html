@@ -174,7 +174,7 @@
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:16px">
-    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v8r18</span></span>
+    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v8r19</span></span>
     <div class="db-status" id="dbStatus">
       <div class="db-dot checking" id="dbDot"></div>
       <span id="dbLabel">Checking DB…</span>
@@ -376,7 +376,7 @@ const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 // ── Tool version (v8r15) ──
 // Bumped whenever the file changes. Appears in the header and PDF footer
 // so any deployed proof can be traced back to the tool revision that made it.
-const TOOL_VERSION = 'V8R18';
+const TOOL_VERSION = 'V8R19';
 
 // Build the timestamp+version string used in proof footers.
 // Format: "YYYY-MM-DD HH:MM TZ Vx.y"  e.g. "2026-05-13 17:24 EST V8R15"
@@ -1262,22 +1262,39 @@ async function previewArtNumber() {
   status.style.color = '#888780';
 
   try {
-    // Use raw fetch with explicit CORS headers to avoid Supabase JS client issues
-    const resp = await fetch(
-      SUPABASE_URL + '/rest/v1/art_counters?select=next_number&method=eq.' + method.toLowerCase(),
-      {
-        method: 'GET',
-        headers: {
-          'apikey': SUPABASE_KEY,
-          'Authorization': 'Bearer ' + SUPABASE_KEY,
-          'Content-Type': 'application/json',
-        },
-        mode: 'cors',
-      }
-    );
-    if (!resp.ok) throw new Error('HTTP ' + resp.status + ': ' + await resp.text());
-    const rows = await resp.json();
-    if (!rows.length) throw new Error('Method not found: ' + method);
+    // v8r19: try each method spelling variant to find the counter row.
+    // Stops at the first one that returns a row.
+    const variants = methodVariants(method);
+    let rows = null;
+    let lastErr = null;
+    for (const v of variants) {
+      const resp = await fetch(
+        SUPABASE_URL + '/rest/v1/art_counters?select=next_number&method=eq.' + encodeURIComponent(v),
+        {
+          method: 'GET',
+          headers: {
+            'apikey': SUPABASE_KEY,
+            'Authorization': 'Bearer ' + SUPABASE_KEY,
+            'Content-Type': 'application/json',
+          },
+          mode: 'cors',
+        }
+      );
+      if (!resp.ok) { lastErr = 'HTTP ' + resp.status + ': ' + await resp.text(); continue; }
+      const r = await resp.json();
+      if (r.length) { rows = r; break; }
+    }
+    if (!rows) {
+      // No counter row exists yet for any spelling — fall back to 1001 as the
+      // preview value. The real claim flow will insert the row when committed.
+      const preview = buildArtNumber(1001, method, customer, artwork);
+      field.value = preview;
+      delete field.dataset.userEdited;
+      field.style.color = '#888780';
+      status.textContent = '(preview — first use of ' + method + ')';
+      status.style.color = '#888780';
+      return;
+    }
 
     const preview = buildArtNumber(rows[0].next_number, method, customer, artwork);
     field.value = preview;
@@ -1292,30 +1309,92 @@ async function previewArtNumber() {
 }
 
 // Claim a real art number (increments counter, saves to DB)
+// ── Method spelling fallback (v8r19) ──
+// The claim_art_number RPC has a server-side whitelist of accepted method
+// strings. Different deployments/migrations of the function have accepted
+// different spellings (some want lowercase "dtf", some want "DTF", some
+// want "Direct to Film"). Rather than hard-coding one, build a fallback
+// list and try each in order, stopping at the first one that succeeds.
+// The art_number prefix lookup (METHOD_PREFIX) is keyed off the lowercase
+// canonical form and unchanged — the "t" prefix for DTF is what flows
+// through to the final art number regardless of which spelling the RPC
+// accepted.
+function methodVariants(method) {
+  if (!method) return [''];
+  const trimmed = String(method).trim();
+  const lower   = trimmed.toLowerCase();
+  const upper   = trimmed.toUpperCase();
+  const titled  = trimmed.charAt(0).toUpperCase() + lower.slice(1);
+  // Common alternate spellings keyed off canonical lowercase
+  const alts = {
+    dtf:         ['DTF', 'dtf', 'Direct to Film',     'direct-to-film',     'direct_to_film'],
+    dtg:         ['DTG', 'dtg', 'Direct to Garment',  'direct-to-garment',  'direct_to_garment'],
+    screenprint: ['Screenprint', 'screenprint', 'Screen Print', 'screen-print', 'screenprinting'],
+    embroidery:  ['Embroidery', 'embroidery'],
+    'heat transfer': ['Heat Transfer', 'heat transfer', 'heat-transfer', 'HeatTransfer'],
+    vinyl:       ['Vinyl', 'vinyl'],
+    sublimation: ['Sublimation', 'sublimation'],
+    patch:       ['Patch', 'patch'],
+    other:       ['Other', 'other'],
+  };
+  // De-duplicate while preserving order: caller-supplied form first, then
+  // alts list for that key, then generic case variants as a final safety net.
+  const seen = new Set();
+  const out = [];
+  const add = v => { if (v && !seen.has(v)) { seen.add(v); out.push(v); } };
+  add(trimmed);
+  (alts[lower] || []).forEach(add);
+  add(upper);
+  add(lower);
+  add(titled);
+  return out;
+}
+
 async function claimAndSaveArtNumber(proofData) {
   const method = getPrimaryMethod();
+  const variants = methodVariants(method);
 
-  // Step 0: Ensure counter row exists
-  const meth0 = getPrimaryMethod().toLowerCase();
-  await fetch(SUPABASE_URL + '/rest/v1/art_counters', {
-    method: 'POST',
-    headers: {'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':'resolution=ignore-duplicates'},
-    mode: 'cors',
-    body: JSON.stringify({method: meth0, next_number: 1001}),
-  });
-  // Step 1: Claim next number via RPC using raw fetch
-  const rpcResp = await fetch(SUPABASE_URL + '/rest/v1/rpc/claim_art_number', {
-    method: 'POST',
-    headers: {
-      'apikey': SUPABASE_KEY,
-      'Authorization': 'Bearer ' + SUPABASE_KEY,
-      'Content-Type': 'application/json',
-    },
-    mode: 'cors',
-    body: JSON.stringify({ p_method: method.toLowerCase() }),
-  });
-  if (!rpcResp.ok) throw new Error('RPC error ' + rpcResp.status + ': ' + await rpcResp.text());
-  const numData = await rpcResp.json();
+  // Step 0: ensure counter row exists. Try each spelling variant — one will
+  // succeed (silent insert or "ignore-duplicates" no-op if row already there).
+  // We don't care which variant created the row; the RPC will look it up.
+  for (const v of variants) {
+    try {
+      await fetch(SUPABASE_URL + '/rest/v1/art_counters', {
+        method: 'POST',
+        headers: {'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':'resolution=ignore-duplicates'},
+        mode: 'cors',
+        body: JSON.stringify({method: v, next_number: 1001}),
+      });
+    } catch (_) {
+      // Network or schema errors will surface again on the RPC call below — ignore here
+    }
+  }
+
+  // Step 1: Claim next number via RPC. Try each spelling until one works.
+  let numData = null;
+  let lastError = null;
+  for (const v of variants) {
+    const rpcResp = await fetch(SUPABASE_URL + '/rest/v1/rpc/claim_art_number', {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_KEY,
+        'Content-Type': 'application/json',
+      },
+      mode: 'cors',
+      body: JSON.stringify({ p_method: v }),
+    });
+    if (rpcResp.ok) {
+      numData = await rpcResp.json();
+      console.log('claim_art_number accepted method spelling: "' + v + '"');
+      break;
+    }
+    lastError = 'RPC error ' + rpcResp.status + ': ' + await rpcResp.text();
+    // Only retry on 400-level "unknown method" / "invalid input" errors.
+    // 401/403/5xx errors won't be fixed by retrying with a different string.
+    if (rpcResp.status >= 500 || rpcResp.status === 401 || rpcResp.status === 403) break;
+  }
+  if (!numData) throw new Error(lastError || 'No method variant accepted by RPC');
 
   const artNum = buildArtNumber(numData, method, proofData.customer_name, proofData.artwork_name);
 
@@ -1698,6 +1777,18 @@ async function generateProofBlob() {
       unit: 'mm', format: 'letter', orientation: 'portrait',
       compress: true, precision: 2,
     });
+
+    // v8r19: set document properties — gives the PDF identifiable metadata
+    // and reduces some PDF.js viewer warnings about missing base URLs.
+    try {
+      pdf.setProperties({
+        title: artNum ? 'Mirror Image Proof — ' + artNum : 'Mirror Image Proof',
+        subject: customer && artwork ? customer + ' — ' + artwork : 'Artwork Proof',
+        creator: 'Mirror Image Proof Builder ' + TOOL_VERSION,
+        author:  'Mirror Image',
+      });
+    } catch (_) { /* setProperties may not exist on older jsPDF builds — non-fatal */ }
+
     const PW = pdf.internal.pageSize.getWidth();   // 215.9mm
     const PH = pdf.internal.pageSize.getHeight();  // 279.4mm
     const M  = 12;
