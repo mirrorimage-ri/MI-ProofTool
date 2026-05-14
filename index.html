@@ -174,7 +174,7 @@
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:16px">
-    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v8r19</span></span>
+    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v8r20</span></span>
     <div class="db-status" id="dbStatus">
       <div class="db-dot checking" id="dbDot"></div>
       <span id="dbLabel">Checking DB…</span>
@@ -329,9 +329,15 @@
     <div class="row" style="margin-bottom:8px">
       <div class="field"><label>Decoration Method</label>
         <select class="pl-method">
-          <option>Screenprint</option><option>Embroidery</option><option>DTG</option>
-          <option selected>DTF</option><option>Heat Transfer</option><option>Vinyl</option>
-          <option>Sublimation</option><option>Patch</option><option>Other</option>
+          <option value="screen">Screen Print</option>
+          <option value="emb">Embroidery</option>
+          <option value="dtg">DTG</option>
+          <option value="dtf" selected>DTF</option>
+          <option value="heat">Heat Transfer</option>
+          <option value="vinyl">Vinyl</option>
+          <option value="sub">Sublimation</option>
+          <option value="patch">Patch</option>
+          <option value="other">Other</option>
         </select>
       </div>
       <div class="field"><label>Colors / Thread Colors</label><input type="text" class="pl-colors" placeholder=""></div>
@@ -376,7 +382,7 @@ const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 // ── Tool version (v8r15) ──
 // Bumped whenever the file changes. Appears in the header and PDF footer
 // so any deployed proof can be traced back to the tool revision that made it.
-const TOOL_VERSION = 'V8R19';
+const TOOL_VERSION = 'V8R20';
 
 // Build the timestamp+version string used in proof footers.
 // Format: "YYYY-MM-DD HH:MM TZ Vx.y"  e.g. "2026-05-13 17:24 EST V8R15"
@@ -420,17 +426,39 @@ function getSB() {
   return sb;
 }
 
+// ── v8r20: canonical short codes ──
+// The dropdown's <option value="..."> attributes use these codes. They're the
+// ONLY string format that flows to the database. Display labels go through
+// METHOD_LABEL for the proof rendering. Art number prefixes come from
+// METHOD_PREFIX. Anywhere the code reads a method value, it gets the short
+// code — never converts or guesses.
 const METHOD_PREFIX = {
-  'dtf':          't',
-  'dtg':          'd',
-  'embroidery':   'e',
-  'screenprint':  '',
-  'heat transfer':'',
-  'vinyl':        '',
-  'sublimation':  '',
-  'patch':        '',
-  'other':        '',
+  dtf:    't',
+  dtg:    'd',
+  emb:    'e',
+  screen: '',
+  heat:   '',
+  vinyl:  '',
+  sub:    '',
+  patch:  '',
+  other:  '',
 };
+
+// Display label for proofs (PDF + on-screen preview)
+const METHOD_LABEL = {
+  dtf:    'DTF',
+  dtg:    'DTG',
+  emb:    'Embroidery',
+  screen: 'Screen Print',
+  heat:   'Heat Transfer',
+  vinyl:  'Vinyl',
+  sub:    'Sublimation',
+  patch:  'Patch',
+  other:  'Other',
+};
+function methodLabel(code) {
+  return METHOD_LABEL[code] || code || '';
+}
 
 let uploads = [];
 let plCount = 0;
@@ -830,7 +858,7 @@ async function generateProof() {
         const variantSuffix = g.variants.length > 1 ? ` (${g.variants.length} variants)` : '';
         headerParts.push(esc(g.loc) + variantSuffix);
         if (g.placement) {
-          if (g.placement.method) headerParts.push(esc(g.placement.method));
+          if (g.placement.method) headerParts.push(esc(methodLabel(g.placement.method)));
           if (g.placement.w && g.placement.h) headerParts.push(esc(g.placement.w) + '" W &times; ' + esc(g.placement.h) + '" H');
           else if (g.placement.w) headerParts.push(esc(g.placement.w) + '" W');
           else if (g.placement.h) headerParts.push(esc(g.placement.h) + '" H');
@@ -1148,7 +1176,7 @@ function showMatchModal(matches) {
     '<p style="margin:0 0 8px">An existing proof for <strong>' + (m.customer_name||'?') + '</strong> / <strong>' + (m.artwork_name||'?') + '</strong> was found:</p>' +
     '<div style="background:#F8F8F6;border:1px solid #EDEDEB;border-radius:6px;padding:10px;font-size:12px;line-height:1.6">' +
       '<div><strong>Art number:</strong> <span style="font-family:monospace;color:#386641">' + (m.art_number||'?') + '</span></div>' +
-      (m.method ? '<div><strong>Method:</strong> ' + m.method + '</div>' : '') +
+      (m.method ? '<div><strong>Method:</strong> ' + methodLabel(m.method) + '</div>' : '') +
       (m.job_number ? '<div><strong>Order/Job #:</strong> ' + m.job_number + '</div>' : '') +
       (when ? '<div><strong>Created:</strong> ' + when + '</div>' : '') +
     '</div>' +
@@ -1236,15 +1264,19 @@ function clearForm() {
 
 
 // ── Supabase ──────────────────────────────────────────────────────────────
-// Returns the primary decoration method from the first placement entry
+// Returns the primary decoration method's canonical short code (e.g. "dtf",
+// "screen", "emb") from the first placement entry. This is the SINGLE STRING
+// that flows everywhere — DB writes, RPC params, prefix lookups, etc.
 function getPrimaryMethod() {
   const first = document.querySelector('.pl-method');
-  return first ? first.value : 'DTF';
+  return first ? first.value : 'dtf';
 }
 
-// Build art number string from counter number + form fields
+// Build art number string from counter number + form fields. The `method`
+// argument must be a canonical short code (e.g. "dtf"); we look up its prefix
+// directly from METHOD_PREFIX without any case conversion.
 function buildArtNumber(num, method, customer, artwork) {
-  const prefix = METHOD_PREFIX[method.toLowerCase()] ?? '';
+  const prefix = METHOD_PREFIX[method] || '';
   const store  = customer.replace(/\s+/g, '').replace(/[^a-zA-Z0-9_-]/g, '') || 'Store';
   const design = artwork.replace(/\s+/g, '').replace(/[^a-zA-Z0-9_-]/g, '')  || 'Design';
   return `${prefix}${num}Store_${store}_${design}`;
@@ -1262,43 +1294,37 @@ async function previewArtNumber() {
   status.style.color = '#888780';
 
   try {
-    // v8r19: try each method spelling variant to find the counter row.
-    // Stops at the first one that returns a row.
-    const variants = methodVariants(method);
-    let rows = null;
-    let lastErr = null;
-    for (const v of variants) {
-      const resp = await fetch(
-        SUPABASE_URL + '/rest/v1/art_counters?select=next_number&method=eq.' + encodeURIComponent(v),
-        {
-          method: 'GET',
-          headers: {
-            'apikey': SUPABASE_KEY,
-            'Authorization': 'Bearer ' + SUPABASE_KEY,
-            'Content-Type': 'application/json',
-          },
-          mode: 'cors',
-        }
-      );
-      if (!resp.ok) { lastErr = 'HTTP ' + resp.status + ': ' + await resp.text(); continue; }
-      const r = await resp.json();
-      if (r.length) { rows = r; break; }
-    }
-    if (!rows) {
-      // No counter row exists yet for any spelling — fall back to 1001 as the
-      // preview value. The real claim flow will insert the row when committed.
+    // Look up counter row for the canonical method code.
+    const resp = await fetch(
+      SUPABASE_URL + '/rest/v1/art_counters?select=next_number&method=eq.' + encodeURIComponent(method),
+      {
+        method: 'GET',
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': 'Bearer ' + SUPABASE_KEY,
+          'Content-Type': 'application/json',
+        },
+        mode: 'cors',
+      }
+    );
+    if (!resp.ok) throw new Error('HTTP ' + resp.status + ': ' + await resp.text());
+    const rows = await resp.json();
+
+    if (!rows.length) {
+      // No counter row yet — preview at 1001. The real claim flow will insert
+      // the row when committed (POST with ignore-duplicates).
       const preview = buildArtNumber(1001, method, customer, artwork);
       field.value = preview;
       delete field.dataset.userEdited;
       field.style.color = '#888780';
-      status.textContent = '(preview — first use of ' + method + ')';
+      status.textContent = '(preview — first use of ' + methodLabel(method) + ')';
       status.style.color = '#888780';
       return;
     }
 
     const preview = buildArtNumber(rows[0].next_number, method, customer, artwork);
     field.value = preview;
-    delete field.dataset.userEdited;  // programmatic value; user can still edit
+    delete field.dataset.userEdited;
     field.style.color = '#888780';
     status.textContent = '(preview — not saved)';
     status.style.color = '#888780';
@@ -1309,92 +1335,35 @@ async function previewArtNumber() {
 }
 
 // Claim a real art number (increments counter, saves to DB)
-// ── Method spelling fallback (v8r19) ──
-// The claim_art_number RPC has a server-side whitelist of accepted method
-// strings. Different deployments/migrations of the function have accepted
-// different spellings (some want lowercase "dtf", some want "DTF", some
-// want "Direct to Film"). Rather than hard-coding one, build a fallback
-// list and try each in order, stopping at the first one that succeeds.
-// The art_number prefix lookup (METHOD_PREFIX) is keyed off the lowercase
-// canonical form and unchanged — the "t" prefix for DTF is what flows
-// through to the final art number regardless of which spelling the RPC
-// accepted.
-function methodVariants(method) {
-  if (!method) return [''];
-  const trimmed = String(method).trim();
-  const lower   = trimmed.toLowerCase();
-  const upper   = trimmed.toUpperCase();
-  const titled  = trimmed.charAt(0).toUpperCase() + lower.slice(1);
-  // Common alternate spellings keyed off canonical lowercase
-  const alts = {
-    dtf:         ['DTF', 'dtf', 'Direct to Film',     'direct-to-film',     'direct_to_film'],
-    dtg:         ['DTG', 'dtg', 'Direct to Garment',  'direct-to-garment',  'direct_to_garment'],
-    screenprint: ['Screenprint', 'screenprint', 'Screen Print', 'screen-print', 'screenprinting'],
-    embroidery:  ['Embroidery', 'embroidery'],
-    'heat transfer': ['Heat Transfer', 'heat transfer', 'heat-transfer', 'HeatTransfer'],
-    vinyl:       ['Vinyl', 'vinyl'],
-    sublimation: ['Sublimation', 'sublimation'],
-    patch:       ['Patch', 'patch'],
-    other:       ['Other', 'other'],
-  };
-  // De-duplicate while preserving order: caller-supplied form first, then
-  // alts list for that key, then generic case variants as a final safety net.
-  const seen = new Set();
-  const out = [];
-  const add = v => { if (v && !seen.has(v)) { seen.add(v); out.push(v); } };
-  add(trimmed);
-  (alts[lower] || []).forEach(add);
-  add(upper);
-  add(lower);
-  add(titled);
-  return out;
-}
-
 async function claimAndSaveArtNumber(proofData) {
-  const method = getPrimaryMethod();
-  const variants = methodVariants(method);
+  const method = getPrimaryMethod();   // canonical short code (e.g. "dtf")
 
-  // Step 0: ensure counter row exists. Try each spelling variant — one will
-  // succeed (silent insert or "ignore-duplicates" no-op if row already there).
-  // We don't care which variant created the row; the RPC will look it up.
-  for (const v of variants) {
-    try {
-      await fetch(SUPABASE_URL + '/rest/v1/art_counters', {
-        method: 'POST',
-        headers: {'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':'resolution=ignore-duplicates'},
-        mode: 'cors',
-        body: JSON.stringify({method: v, next_number: 1001}),
-      });
-    } catch (_) {
-      // Network or schema errors will surface again on the RPC call below — ignore here
-    }
-  }
-
-  // Step 1: Claim next number via RPC. Try each spelling until one works.
-  let numData = null;
-  let lastError = null;
-  for (const v of variants) {
-    const rpcResp = await fetch(SUPABASE_URL + '/rest/v1/rpc/claim_art_number', {
+  // Step 0: ensure counter row exists for this method.
+  // "ignore-duplicates" makes this a no-op if the row is already there.
+  try {
+    await fetch(SUPABASE_URL + '/rest/v1/art_counters', {
       method: 'POST',
-      headers: {
-        'apikey': SUPABASE_KEY,
-        'Authorization': 'Bearer ' + SUPABASE_KEY,
-        'Content-Type': 'application/json',
-      },
+      headers: {'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':'resolution=ignore-duplicates'},
       mode: 'cors',
-      body: JSON.stringify({ p_method: v }),
+      body: JSON.stringify({ method: method, next_number: 1001 }),
     });
-    if (rpcResp.ok) {
-      numData = await rpcResp.json();
-      console.log('claim_art_number accepted method spelling: "' + v + '"');
-      break;
-    }
-    lastError = 'RPC error ' + rpcResp.status + ': ' + await rpcResp.text();
-    // Only retry on 400-level "unknown method" / "invalid input" errors.
-    // 401/403/5xx errors won't be fixed by retrying with a different string.
-    if (rpcResp.status >= 500 || rpcResp.status === 401 || rpcResp.status === 403) break;
+  } catch (_) {
+    // Non-fatal — RPC call below will surface real errors
   }
-  if (!numData) throw new Error(lastError || 'No method variant accepted by RPC');
+
+  // Step 1: Claim next number via RPC.
+  const rpcResp = await fetch(SUPABASE_URL + '/rest/v1/rpc/claim_art_number', {
+    method: 'POST',
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': 'Bearer ' + SUPABASE_KEY,
+      'Content-Type': 'application/json',
+    },
+    mode: 'cors',
+    body: JSON.stringify({ p_method: method }),
+  });
+  if (!rpcResp.ok) throw new Error('RPC error ' + rpcResp.status + ': ' + await rpcResp.text());
+  const numData = await rpcResp.json();
 
   const artNum = buildArtNumber(numData, method, proofData.customer_name, proofData.artwork_name);
 
@@ -1581,10 +1550,28 @@ function loadJob(val) {
       entry.querySelector('.pl-collar').value = p.collar || '';
       entry.querySelector('.pl-center').value = p.center || '';
       entry.querySelector('.pl-desc').value   = p.desc   || '';
-      // Set method dropdown
+      // Set method dropdown (handles legacy stored values from old versions)
       const mSel = entry.querySelector('.pl-method');
+      const stored = String(p.method || '').trim();
+      // Map known legacy strings to current short codes
+      const legacyMap = {
+        'screenprint': 'screen', 'screen print': 'screen',
+        'embroidery':  'emb',
+        'heat transfer': 'heat',
+        'sublimation': 'sub',
+        'dtf': 'dtf', 'dtg': 'dtg', 'vinyl': 'vinyl', 'patch': 'patch', 'other': 'other',
+      };
+      const remapped = legacyMap[stored.toLowerCase()];
+      let matched = false;
       Array.from(mSel.options).forEach(opt => {
-        if (opt.text === p.method || opt.value === p.method) { mSel.value = opt.value; }
+        if (matched) return;
+        if (opt.value === stored ||                        // already canonical
+            opt.value === remapped ||                       // legacy remap
+            opt.text.toLowerCase() === stored.toLowerCase() // display-text match (case-insensitive)
+        ) {
+          mSel.value = opt.value;
+          matched = true;
+        }
       });
       entry.querySelector('.pl-colors').value = p.colors || '';
     });
@@ -2026,7 +2013,7 @@ async function generateProofBlob() {
         const variantSuffix = g.cards.length > 1 ? ` (${g.cards.length} variants)` : '';
         headerParts.push(g.loc + variantSuffix);
         if (g.placement) {
-          if (g.placement.method) headerParts.push(g.placement.method);
+          if (g.placement.method) headerParts.push(methodLabel(g.placement.method));
           // Size
           if (g.placement.w && g.placement.h) headerParts.push(`${g.placement.w}" W \u00d7 ${g.placement.h}" H`);
           else if (g.placement.w) headerParts.push(`${g.placement.w}" W`);
