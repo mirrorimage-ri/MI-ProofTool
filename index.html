@@ -191,7 +191,7 @@
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:16px">
-    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v8r21</span></span>
+    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v8r22</span></span>
     <span id="initialsChip" onclick="promptInitials(true)" title="Click to change initials"
       style="display:none;align-items:center;gap:6px;font-size:12px;color:#386641;background:#F0F5EE;border:1px solid #D3D1C7;border-radius:14px;padding:3px 10px;cursor:pointer;font-weight:600;letter-spacing:.05em">
       <span style="color:#888780;font-weight:400;text-transform:uppercase;font-size:10px">By</span>
@@ -407,7 +407,7 @@ const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 // ── Tool version (v8r15) ──
 // Bumped whenever the file changes. Appears in the header and PDF footer
 // so any deployed proof can be traced back to the tool revision that made it.
-const TOOL_VERSION = 'V8R21';
+const TOOL_VERSION = 'V8R22';
 
 // ── User initials (v8r21) ──
 // Stored once per browser in localStorage under 'mi_user_initials'. Stamped
@@ -1360,6 +1360,13 @@ async function uploadToDropbox() {
       msg.style.color = '#386641';
     }
     document.getElementById("pdfUploadProgress").style.display = "none";
+    // v8r22: ensure the upload button is enabled and shows the correct label
+    // each time the modal opens (in case a prior attempt left it disabled).
+    const uploadBtn = document.getElementById("pdfPreviewUploadBtn");
+    if (uploadBtn) {
+      uploadBtn.disabled = false;
+      uploadBtn.innerHTML = '&#11014; Upload to Dropbox';
+    }
     document.getElementById("pdfPreviewOverlay").classList.add("visible");
 
     btn.textContent = origText;
@@ -2479,10 +2486,10 @@ if (document.readyState === "loading") {
     <h3 id="pdfPreviewTitle">Proof PDF Preview</h3>
     <iframe class="pdf-preview-iframe" id="pdfPreviewFrame"></iframe>
     <div id="pdfPreviewCommitMsg" style="font-size:12px;color:#386641;font-weight:500;padding:6px 10px;background:#F0F5EE;border-radius:6px"></div>
-    <div style="font-size:12px;color:#888780">Review the proof above. Click <strong>Upload to Dropbox</strong> to commit the art number and proceed.</div>
+    <div style="font-size:12px;color:#888780">Review the proof above, then click the blue button to commit the art number and upload to Dropbox.</div>
     <div class="pdf-preview-btns">
       <button class="btn btn-secondary" onclick="cancelPdfUpload()">Cancel</button>
-      <button class="btn" style="background:#386641;color:#fff;font-weight:600;border:none" onclick="proceedWithUpload()">Upload to Dropbox</button>
+      <button class="btn" id="pdfPreviewUploadBtn" style="background:#0061fe;color:#fff;font-weight:600;border:none" onclick="proceedWithUpload()">&#11014; Upload to Dropbox</button>
     </div>
     <div id="pdfUploadProgress" style="font-size:12px;color:#6A994E;display:none;text-align:center"></div>
   </div>
