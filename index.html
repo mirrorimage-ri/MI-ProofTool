@@ -191,7 +191,7 @@
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:16px">
-    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v8r23</span></span>
+    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v8r24</span></span>
     <span id="initialsChip" onclick="promptInitials(true)" title="Click to change initials"
       style="display:none;align-items:center;gap:6px;font-size:12px;color:#386641;background:#F0F5EE;border:1px solid #D3D1C7;border-radius:14px;padding:3px 10px;cursor:pointer;font-weight:600;letter-spacing:.05em">
       <span style="color:#888780;font-weight:400;text-transform:uppercase;font-size:10px">By</span>
@@ -358,7 +358,6 @@
           <option value="emb">Embroidery</option>
           <option value="dtg">DTG</option>
           <option value="dtf" selected>DTF</option>
-          <option value="heat">Heat Transfer</option>
           <option value="vinyl">Vinyl</option>
           <option value="sub">Sublimation</option>
           <option value="patch">Patch</option>
@@ -407,7 +406,7 @@ const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 // ── Tool version (v8r15) ──
 // Bumped whenever the file changes. Appears in the header and PDF footer
 // so any deployed proof can be traced back to the tool revision that made it.
-const TOOL_VERSION = 'V8R23';
+const TOOL_VERSION = 'V8R24';
 
 // ── User initials (v8r21) ──
 // Stored once per browser in localStorage under 'mi_user_initials'. Stamped
@@ -522,7 +521,6 @@ const METHOD_PREFIX = {
   dtg:    'd',
   emb:    'e',
   screen: '',
-  heat:   '',
   vinyl:  '',
   sub:    '',
   patch:  '',
@@ -535,7 +533,6 @@ const METHOD_LABEL = {
   dtg:    'DTG',
   emb:    'Embroidery',
   screen: 'Screen Print',
-  heat:   'Heat Transfer',
   vinyl:  'Vinyl',
   sub:    'Sublimation',
   patch:  'Patch',
@@ -1006,7 +1003,10 @@ async function generateProof() {
   document.getElementById('proofFootR').textContent = buildFooterStamp();
 }
 // Dropbox Integration
-const DBX_APP_KEY  = '1c4kmzj8a1k2g5k';
+// v8r24: new Dropbox app key with Full Dropbox access (the previous app was
+// configured as App-folder type, which sandboxed all uploads to /Apps/<name>/
+// instead of writing to the team folder path we asked for).
+const DBX_APP_KEY  = 'z97cekua4nh7gg7';
 const DBX_REDIRECT = 'https://mirrorimage-ri.github.io/MI-ProofTool/';
 // v8r23: now uploads to the team folder so colleagues can see files
 const DBX_BASE = '/Web Stores/Web Store Art Proofs';
@@ -1029,7 +1029,6 @@ const METHOD_SUBFOLDER = {
   dtg:    'DTG',
   emb:    'Embroidery',
   screen: 'Screen Print',
-  heat:   'Heat Transfer',
   vinyl:  'Vinyl',
   sub:    'Sublimation',
   patch:  'Patch',
@@ -1801,7 +1800,7 @@ function loadJob(val) {
       const legacyMap = {
         'screenprint': 'screen', 'screen print': 'screen',
         'embroidery':  'emb',
-        'heat transfer': 'heat',
+        'heat transfer': 'dtf',   // v8r24: heat transfer is the same as DTF in our shop
         'sublimation': 'sub',
         'dtf': 'dtf', 'dtg': 'dtg', 'vinyl': 'vinyl', 'patch': 'patch', 'other': 'other',
       };
