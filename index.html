@@ -191,7 +191,7 @@
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:16px">
-    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v8r24</span></span>
+    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v8r25</span></span>
     <span id="initialsChip" onclick="promptInitials(true)" title="Click to change initials"
       style="display:none;align-items:center;gap:6px;font-size:12px;color:#386641;background:#F0F5EE;border:1px solid #D3D1C7;border-radius:14px;padding:3px 10px;cursor:pointer;font-weight:600;letter-spacing:.05em">
       <span style="color:#888780;font-weight:400;text-transform:uppercase;font-size:10px">By</span>
@@ -406,7 +406,7 @@ const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 // ── Tool version (v8r15) ──
 // Bumped whenever the file changes. Appears in the header and PDF footer
 // so any deployed proof can be traced back to the tool revision that made it.
-const TOOL_VERSION = 'V8R24';
+const TOOL_VERSION = 'V8R25';
 
 // ── User initials (v8r21) ──
 // Stored once per browser in localStorage under 'mi_user_initials'. Stamped
@@ -856,7 +856,7 @@ async function generateProof() {
     job      && ['Order / Job #', esc(job)],
     garment  && ['Garment', esc(garment)],
     dropbox  && ['Dropbox',
-      '<a href="' + esc(dropbox) + '" target="_blank" style="color:#0061fe;font-family:monospace;font-size:11px;word-break:break-all">' + esc(dropbox) + '</a>'
+      '<a href="' + esc(dropbox) + '" target="_blank" rel="noopener" style="color:#0061fe;font-size:13px;font-weight:500;text-decoration:none;display:inline-flex;align-items:center;gap:4px">View Dropbox folder <span style="font-size:11px">&rarr;</span></a>'
     ],
   ].filter(Boolean);
 
@@ -2087,7 +2087,10 @@ async function generateProofBlob() {
       artwork  && ['Artwork', artwork, 'helvetica'],
       job      && ['Order/Job #', job, 'helvetica'],
       garment  && ['Garment', garment, 'helvetica'],
-      dropbox  && ['Dropbox', dropbox, 'courier'],
+      // v8r25: Dropbox field — display friendly label, the URL is just the
+      // link target. 4th tuple element flags this as a hyperlink so renderer
+      // uses textWithLink instead of plain text.
+      dropbox  && ['Dropbox', 'View Dropbox folder \u2192', 'helvetica', dropbox],
     ].filter(Boolean);
 
     // Dynamic font scaling for the header block AND notes together. We pick
@@ -2159,13 +2162,32 @@ async function generateProofBlob() {
       pdf.setFont('helvetica', 'bold').setFontSize(labelPt).setTextColor(...C.green);
       pdf.text(a[0].toUpperCase(), M, y);
       if (b) pdf.text(b[0].toUpperCase(), M + colW, y);
-      pdf.setFont(a[2], 'normal').setFontSize(bodyPt).setTextColor(...C.darkTx);
+
+      // Render value (a)
+      const aIsLink = !!a[3];
+      pdf.setFont(a[2], 'normal').setFontSize(bodyPt).setTextColor(...(aIsLink ? C.blue : C.darkTx));
       const aLines = pdf.splitTextToSize(clean(a[1]), colW - 3);
-      pdf.text(aLines, M, y + labelToBodyOffset);
+      if (aIsLink) {
+        // textWithLink takes a single string (no array). We render line by line.
+        aLines.forEach((line, li) => {
+          pdf.textWithLink(line, M, y + labelToBodyOffset + li * lineMm, { url: a[3] });
+        });
+      } else {
+        pdf.text(aLines, M, y + labelToBodyOffset);
+      }
+
+      // Render value (b) if present
       if (b) {
-        pdf.setFont(b[2], 'normal');
+        const bIsLink = !!b[3];
+        pdf.setFont(b[2], 'normal').setTextColor(...(bIsLink ? C.blue : C.darkTx));
         const bLines = pdf.splitTextToSize(clean(b[1]), colW - 3);
-        pdf.text(bLines, M + colW, y + labelToBodyOffset);
+        if (bIsLink) {
+          bLines.forEach((line, li) => {
+            pdf.textWithLink(line, M + colW, y + labelToBodyOffset + li * lineMm, { url: b[3] });
+          });
+        } else {
+          pdf.text(bLines, M + colW, y + labelToBodyOffset);
+        }
       }
       const rowH = Math.max(aLines.length, b ? pdf.splitTextToSize(clean(b[1]), colW - 3).length : 1);
       y += labelToBodyOffset + rowH * lineMm + gapMm;
@@ -2433,15 +2455,55 @@ async function proceedWithUpload() {
       step++;
     }
 
-    // Upload PDF
+    // Upload PDF (v1 — without the Dropbox link, since the folder doesn't have a link yet)
     prog.textContent = step + "/" + total + " Uploading proof PDF...";
     await dbxUploadFile(_pendingFolder + "/" + _pendingArtNum + "_proof.pdf", _pendingBlob);
     step++;
 
-    // Shared link
-    prog.textContent = step + "/" + total + " Creating link...";
+    // Get a shareable link to the new folder
+    prog.textContent = step + "/" + total + " Creating shareable link...";
     const link = await dbxGetOrCreateLink(_pendingFolder);
-    if (link) document.getElementById("dropboxLink").value = link;
+    if (link) {
+      document.getElementById("dropboxLink").value = link;
+    }
+
+    // v8r25: regenerate the PDF now that the form's Dropbox field is filled in,
+    // then overwrite the v1 PDF in Dropbox so the final file contains the link.
+    // If this step fails we don't roll back — the v1 PDF + DB row are still
+    // good, the user just doesn't get a link embedded in the PDF.
+    if (link) {
+      try {
+        prog.textContent = "Regenerating proof with Dropbox link...";
+        const blobV2 = await generateProofBlob();
+        await dbxUploadFile(_pendingFolder + "/" + _pendingArtNum + "_proof.pdf", blobV2);
+        _pendingBlob = blobV2;
+        // Patch the DB row's dropbox_link field so it persists for next-time load
+        try {
+          await updateExistingProof(_pendingArtNum, {
+            customer_name: document.getElementById('customerName').value.trim(),
+            artwork_name:  document.getElementById('artworkName').value.trim(),
+            method:        getPrimaryMethod(),
+            job_number:    document.getElementById('jobNumber').value.trim() || null,
+            garment:       document.getElementById('garmentStyle').value.trim() || null,
+            dropbox_link:  link,
+            notes:         document.getElementById('notes').value.trim() || null,
+            placements:    gatherPl(),
+          });
+        } catch (dbErr) {
+          console.warn('Patching dropbox_link on DB row failed (non-fatal):', dbErr);
+        }
+        // Refresh on-screen preview so it shows the new link too
+        try { await generateProof(); } catch (_) {}
+      } catch (regenErr) {
+        // Non-fatal: alert user but consider the upload a success
+        console.error('Re-upload of v2 PDF failed:', regenErr);
+        alert(
+          'The proof uploaded successfully, but the final PDF (with the Dropbox link inside) failed to re-upload.\n\n' +
+          'Error: ' + regenErr.message + '\n\n' +
+          'The folder link is saved. You can manually export the proof again and upload it to overwrite the existing PDF if needed.'
+        );
+      }
+    }
 
     prog.textContent = "\u2713 Done! Uploaded to " + _pendingArtNum;
     prog.style.color = "#386641";
