@@ -191,7 +191,7 @@
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:16px">
-    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v8r22</span></span>
+    <span class="header-title">Proof Builder <span style="opacity:.8;font-weight:400;color:#6A994E">v8r23</span></span>
     <span id="initialsChip" onclick="promptInitials(true)" title="Click to change initials"
       style="display:none;align-items:center;gap:6px;font-size:12px;color:#386641;background:#F0F5EE;border:1px solid #D3D1C7;border-radius:14px;padding:3px 10px;cursor:pointer;font-weight:600;letter-spacing:.05em">
       <span style="color:#888780;font-weight:400;text-transform:uppercase;font-size:10px">By</span>
@@ -407,7 +407,7 @@ const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 // ── Tool version (v8r15) ──
 // Bumped whenever the file changes. Appears in the header and PDF footer
 // so any deployed proof can be traced back to the tool revision that made it.
-const TOOL_VERSION = 'V8R22';
+const TOOL_VERSION = 'V8R23';
 
 // ── User initials (v8r21) ──
 // Stored once per browser in localStorage under 'mi_user_initials'. Stamped
@@ -1008,7 +1008,8 @@ async function generateProof() {
 // Dropbox Integration
 const DBX_APP_KEY  = '1c4kmzj8a1k2g5k';
 const DBX_REDIRECT = 'https://mirrorimage-ri.github.io/MI-ProofTool/';
-const DBX_BASE = '/Web Store Art Proofs';
+// v8r23: now uploads to the team folder so colleagues can see files
+const DBX_BASE = '/Web Stores/Web Store Art Proofs';
 const PLACEMENT_SUFFIX = {
   'left-chest': 'LC',
   'right-chest': 'RC',
@@ -1020,15 +1021,23 @@ const PLACEMENT_SUFFIX = {
   'neck-label': 'NCK'
 };
 
+// v8r23: keys now match the canonical short codes used everywhere else
+// (the old keys 'embroidery' and 'screenprint' were left over from before
+// the v8r20 method system rewrite and were silently routing to the default).
 const METHOD_SUBFOLDER = {
-  'dtf':         'DTF',
-  'dtg':         'DTG',
-  'embroidery':  'Embroidery',
-  'screenprint': 'Screen Print',
+  dtf:    'DTF',
+  dtg:    'DTG',
+  emb:    'Embroidery',
+  screen: 'Screen Print',
+  heat:   'Heat Transfer',
+  vinyl:  'Vinyl',
+  sub:    'Sublimation',
+  patch:  'Patch',
+  other:  'Other',
 };
 function getDbxFolder(artNum) {
-  const method = getPrimaryMethod().toLowerCase();
-  const sub = METHOD_SUBFOLDER[method] || 'Screen Print';
+  const method = getPrimaryMethod();  // canonical short code (e.g. "dtf")
+  const sub = METHOD_SUBFOLDER[method] || 'Other';
   return DBX_BASE + '/' + sub + '/' + artNum;
 }
 let dbxToken   = localStorage.getItem('dbx_token') || null;
